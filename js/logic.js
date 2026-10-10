@@ -90,6 +90,8 @@ function buySticker(d,emo,cost){
   if(d.stickers.includes(emo)||d.stars<cost) return false;
   d.stars-=cost; d.stickers.push(emo); return true;
 }
+/* Ein Sticker-Pack ist offen, wenn es keine Bedingung hat oder der Test von Level need bestanden ist (ab 75 %) */
+const packOpen=(d,pack)=>!pack.need||((d.tests['level:'+pack.need]||{}).best||0)>=75;
 /* Spezial-Sticker für einen bestandenen Level-Test; liefert das neue Emoji oder null */
 function levelReward(d,level,passed,rewards){
   const r=rewards[level];
@@ -119,6 +121,8 @@ function slotPattern(slot){
     case 'animal': return "(?:a |an |the )?"+alt(plural(items(['animals','zoo'])));
     case 'food': return "(?:a |an |some |the )?"+alt(plural(items(['food'])));
     case 'weather': return alt(['sunny','raining','rainy','snowing','snowy','windy','cloudy','cold','hot','warm','nice','foggy']);
+    case 'body': return "(?:my |a )?"+alt(items(['body']).concat(['head','tummy','stomach','throat','back','knee','neck','eyes','ears','teeth','feet']));
+    case 'country': return alt(items(['countries']).concat(['england','the uk','the usa','austria','portugal','turkey','kosovo','serbia']));
     case 'any': return '(.+)';
     default: throw new Error('Unbekannter Platzhalter '+slot);
   }
@@ -136,11 +140,11 @@ function dialogMatch(heard,answers){
   return {ok:false,slots:{}};
 }
 /* {name} usw. in einem Satz der Figur durch das Gesagte ersetzen (Namen mit grossem Anfangsbuchstaben) */
-const SLOT_DEFAULT={name:'friend',number:'that',color:'That colour',animal:'that animal',food:'that',weather:'nice',any:'that'};
+const SLOT_DEFAULT={name:'friend',number:'that',color:'That colour',animal:'that animal',food:'that',weather:'nice',any:'that',body:'poor thing',country:'nice'};
 function fillSlots(text,slots){
   const t=text.replace(/\{(\w+)\}/g,(m,n)=>{
     const v=slots[n]; if(!v) return SLOT_DEFAULT[n]||'';
-    return n==='name'?v.replace(/\b[a-z]/g,c=>c.toUpperCase()):v;
+    return n==='name'||n==='country'?v.replace(/\b[a-z]/g,c=>c.toUpperCase()):v;
   }).replace(/\s+([,!?.])/g,'$1').replace(/\s{2,}/g,' ').trim();
   return t.charAt(0).toUpperCase()+t.slice(1);
 }

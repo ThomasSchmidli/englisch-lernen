@@ -8,7 +8,7 @@
   - `js/logic.js`: reine Logik ohne Anzeige (Datum, Spielstand-Format, Wiederholung, Serie, Sprachvergleich, Test-Auswertung) – wird von `scripts/test.js` geprüft
   - `js/app.js`: Anzeige und Ablauf (Spiele, Tests, Sprechen, Eltern-Bereich)
 - Inhalte:
-  - Levels: `LEVELS=[{n, icon, name, sub}]`, jedes Thema hat `level`
+  - Levels: `LEVELS=[{n, icon, name, sub}]` (zurzeit 1–7), jedes Thema, jede Geschichte und jedes Gespräch hat `level`
   - Wort-Thema: `{id, level, kind:'words', name, icon, color, items:[W(en, de, emoji)]}` (Farben: `c`, Zahlen: `n`, kurzer Text wie «Mo»: `t`)
   - Satz-Thema: `{id, level, kind:'sentences', ..., items:[S(en, de, emoji)]}`
   - Bestehende `id`s und `en`-Texte nicht ändern: daran hängt der Spielstand.
@@ -20,6 +20,9 @@
   kann die Figur später verwenden. Jede `example` muss zu ihren `answers` passen (prüft `scripts/test.js`).
   Zwei Stufen: «Mit Hilfe» (`tests['dialog:id']`) und «Profi» (`tests['dialogpro:id']`, Beispiel und Übersetzung erst nach dem ersten Fehlversuch).
 - Sticker-Album: `STICKER_PACKS` und `LEVEL_STICKERS` in `js/data.js`; Emojis nicht ändern (daran hängt der Spielstand).
+  Preise steigen pro Pack (10 bis 80 Sterne); Packs mit `need` öffnen sich erst nach bestandenem Test dieses Levels (`packOpen`).
+  Jedes Level braucht einen Spezial-Sticker in `LEVEL_STICKERS` (prüft `scripts/test.js`).
+- Platzhalter in Gesprächen: `{name} {number} {color} {animal} {food} {weather} {body} {country} {any}`.
 - Spielstand-Schlüssel `englisch-lernen-v1` in localStorage nicht ändern. Bei Änderungen am Datenformat eine Übernahme der alten Daten in `normalize()` (js/logic.js) einbauen; das nutzt auch «Wiederherstellen».
   - Inhalt: `stars`, `known` (gelernt pro Thema), `srs` (`'themaId|en'` → `{l: Stufe 0–5, d: fällig am JJJJ-MM-TT, w: Anzahl Fehler}`),
     `streak` (`{n, last}`), `bonus` (Datum der letzten Extra-Sterne), `tests` (`'theme:id'`/`'level:n'` → `{best, last, date}`),

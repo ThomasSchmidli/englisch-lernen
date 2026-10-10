@@ -57,7 +57,7 @@ for(const d of DIALOGS){
   for(const t of d.turns||[]){
     if(!t.say||!t.de||!t.example||!t.hint||!Array.isArray(t.answers)||!t.answers.length) err(`${where}: Schritt unvollständig («${t.say}»)`);
     for(const a of t.answers||[]) for(const m of a.matchAll(/\{(\w+)\}/g))
-      if(!['name','number','color','animal','food','weather','any'].includes(m[1])) err(`${where}: unbekannter Platzhalter {${m[1]}}`);
+      if(!['name','number','color','animal','food','weather','any','body','country'].includes(m[1])) err(`${where}: unbekannter Platzhalter {${m[1]}}`);
   }
   if(/ß/.test(JSON.stringify(d))) err(`${where}: «ß» statt «ss»`);
 }

@@ -4,7 +4,7 @@ const root=path.join(__dirname,'..');
 const ctx={}; vm.createContext(ctx);
 for(const f of ['js/data.js','js/logic.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx,{filename:f});
 const run=code=>vm.runInContext(code,ctx);
-const L=run('({practicePick,DIALOGS,wordMatch,dialogMatch,fillSlots,THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
+const L=run('({packOpen,practicePick,DIALOGS,wordMatch,dialogMatch,fillSlots,THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
 
 let failed=0, passed=0;
 // Objekte aus dem vm-Kontext haben andere Prototypen: als JSON vergleichen
@@ -118,6 +118,19 @@ test('Spezial-Sticker nur für bestandene Level-Tests und nur einmal',()=>{
   assert.strictEqual(L.levelReward(d,1,true,L.LEVEL_STICKERS),null);
   eq(d.stickers,['🦄']);
 });
+test('Sticker-Packs: teurer werdend, späte Packs erst nach Level-Tests',()=>{
+  const costs=L.STICKER_PACKS.map(p=>p.cost);
+  eq(costs,[...costs].sort((a,b)=>a-b));
+  const total=L.STICKER_PACKS.reduce((n,p)=>n+p.cost*p.items.length,0);
+  assert.ok(total>=2000,`alle Sticker kosten nur ${total} Sterne`);
+  const d=L.fresh();
+  for(const p of L.STICKER_PACKS) if(p.need) assert.ok(L.LEVELS.some(l=>l.n===p.need),`${p.name}: Level ${p.need} fehlt`);
+  const late=L.STICKER_PACKS.find(p=>p.need);
+  assert.ok(!L.packOpen(d,late));
+  d.tests['level:'+late.need]={best:74}; assert.ok(!L.packOpen(d,late));
+  d.tests['level:'+late.need]={best:75}; assert.ok(L.packOpen(d,late));
+  assert.ok(L.packOpen(d,L.STICKER_PACKS[0]));
+});
 test('Sticker sind eindeutig und jedes Level hat einen Spezial-Sticker',()=>{
   const all=[...L.STICKER_PACKS.flatMap(p=>p.items.map(i=>i[0])),...Object.values(L.LEVEL_STICKERS).map(x=>x[0])];
   assert.strictEqual(new Set(all).size,all.length,'doppelter Sticker');
@@ -141,6 +154,8 @@ test('Antwortmuster mit freien Teilen',()=>{
   eq(dm('My favourite colour is grey.',['{color}']),{ok:true,slots:{color:'grey'}});
   eq(dm("It's raining.",['{weather}']),{ok:true,slots:{weather:'raining'}});
   eq(dm('I want to play football',['i want to {any}']),{ok:true,slots:{any:'play football'}});
+  eq(dm('My head hurts.',['{body}']),{ok:true,slots:{body:'head'}});
+  eq(dm('I am from Switzerland.',['{country}']),{ok:true,slots:{country:'switzerland'}});
 });
 test('falsche Antworten passen nicht',()=>{
   assert.ok(!L.dialogMatch('banana',['{color}']).ok);
@@ -153,6 +168,7 @@ test('Figur verwendet das Gesagte, sonst einen Ersatz',()=>{
   assert.strictEqual(L.fillSlots('{color}! Nice!',{color:'blue'}),'Blue! Nice!');
   assert.strictEqual(L.fillSlots('Oh, it is {weather}!',{}),'Oh, it is nice!');
   assert.strictEqual(L.fillSlots('Goodbye, {name}!',{}),'Goodbye, friend!');
+  assert.strictEqual(L.fillSlots('Oh, {country}! Cool!',{country:'switzerland'}),'Oh, Switzerland! Cool!');
 });
 test('jede Beispielantwort passt zu ihren Mustern, Platzhalter sind gültig',()=>{
   for(const d of L.DIALOGS) for(const t of d.turns){

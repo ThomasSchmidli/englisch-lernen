@@ -1,7 +1,7 @@
 /* Anzeige und Ablauf der App: Navigation, Spiele, Tests, Sprachausgabe, Aufnahme, Spielstand.
    Reine Logik (Datum, Wiederholung, Sprachvergleich, Auswertung) liegt in js/logic.js. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='14';
+const VERSION='15';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 /* Spielstand im Browser (Schlüssel nicht ändern, sonst beginnt der Spielstand bei null) */
@@ -93,11 +93,13 @@ function levelTestTile(l){
 }
 
 /* Sticker-Album */
-const ALL_STICKERS=STICKER_PACKS.flatMap(p=>p.items.map(([e,name])=>({e,name,cost:p.cost})));
+const ALL_STICKERS=STICKER_PACKS.flatMap(p=>p.items.map(([e,name])=>({e,name,cost:p.cost,pack:p})));
 function albumTile(){
   const have=data.stickers.length, total=ALL_STICKERS.length+Object.keys(LEVEL_STICKERS).length;
-  const next=ALL_STICKERS.filter(x=>!data.stickers.includes(x.e)).sort((a,b)=>a.cost-b.cost)[0];
-  const meta=next?(data.stars>=next.cost?'Du kannst einen neuen Sticker aussuchen! 🎉':`Noch ${next.cost-data.stars} ⭐ bis zum nächsten Sticker`):'Alle Sticker gesammelt!';
+  const left=ALL_STICKERS.filter(x=>!data.stickers.includes(x.e));
+  const next=left.filter(x=>packOpen(data,x.pack)).sort((a,b)=>a.cost-b.cost)[0];
+  const meta=next?(data.stars>=next.cost?'Du kannst einen neuen Sticker aussuchen! 🎉':`Noch ${next.cost-data.stars} ⭐ bis zum nächsten Sticker`)
+    :left.length?'Besteh den nächsten Level-Test, dann öffnet sich ein neues Pack!':'Alle Sticker gesammelt!';
   return `<button class="btn tile album" data-go="album">
     <span class="icon" style="background:var(--berry)">📒</span>
     <span class="tx"><span class="name">Sticker-Album <span class="small">${have} von ${total}</span></span><span class="meta">${meta}</span></span>
@@ -111,8 +113,10 @@ function album(msg){
   app.innerHTML=`${topbar('home','Sticker-Album')}
   <p class="lead small">Für Sterne bekommst du Sticker. Such dir einen aus!</p>
   ${msg?`<p class="newstk" role="status">${msg}</p>`:''}
-  ${STICKER_PACKS.map(p=>`<h3 class="sec">${p.name} <span class="sub">je ${p.cost} ⭐</span></h3>
-  <div class="stks">${p.items.map(([e,name])=>cell(e,name,`<button class="stk lock${data.stars>=p.cost?' can':''}" data-buy="${e}" data-cost="${p.cost}" aria-label="${name} für ${p.cost} Sterne freischalten"><span class="se">?</span><span class="sn">${p.cost} ⭐</span></button>`)).join('')}</div>`).join('')}
+  ${STICKER_PACKS.map(p=>{const open=packOpen(data,p); return `<h3 class="sec">${open?'':'🔒 '}${p.name} <span class="sub">je ${p.cost} ⭐${open?'':` · ab Test ${L(p.need).name}`}</span></h3>
+  <div class="stks">${p.items.map(([e,name])=>cell(e,name,open
+    ?`<button class="stk lock${data.stars>=p.cost?' can':''}" data-buy="${e}" data-cost="${p.cost}" aria-label="${name} für ${p.cost} Sterne freischalten"><span class="se">?</span><span class="sn">${p.cost} ⭐</span></button>`
+    :`<button class="stk lock closed" data-go="ltest:${p.need}" aria-label="Erst Test ${L(p.need).name} bestehen"><span class="se">🔒</span><span class="sn">${L(p.need).name}</span></button>`)).join('')}</div>`;}).join('')}
   <h3 class="sec">Spezial-Sticker <span class="sub">für bestandene Level-Tests</span></h3>
   <div class="stks">${LEVELS.map(l=>{const [e,name]=LEVEL_STICKERS[l.n]; return cell(e,name,`<button class="stk lock" data-go="ltest:${l.n}" aria-label="Test ${l.name} bestehen"><span class="se">🔒</span><span class="sn">Test ${l.name}</span></button>`);}).join('')}</div>`;
   let armed=null;
@@ -123,7 +127,7 @@ function album(msg){
       if(armed) armed.querySelector('.sn').textContent=armed.dataset.cost+' ⭐';
       armed=b; b.querySelector('.sn').textContent='Nochmal tippen!'; pop(b); return;
     }
-    if(buySticker(data,e,cost)){save(); album(`Neuer Sticker: ${e} ${st.name}!`);}
+    if(packOpen(data,st.pack)&&buySticker(data,e,cost)){save(); album(`Neuer Sticker: ${e} ${st.name}!`);}
   });
 }
 /* Geschichten: Seite für Seite vorlesen, dann Verständnisfragen (ein Versuch, Ergebnis wie ein Test) */

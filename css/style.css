@@ -243,3 +243,4 @@ h1,h2,h3,p{margin:0}
 .turn .tip .small{color:var(--muted)}
 .turn .dots{margin:.2rem 0 .6rem}
 .hint.pro{font-weight:700;color:var(--grape);margin:0 0 .6rem}
+.stk.closed{opacity:.6}

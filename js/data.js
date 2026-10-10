@@ -4,18 +4,27 @@ const LEVELS=[
   {n:1,icon:'🌱',name:'Level 1',sub:'Erste Wörter'},
   {n:2,icon:'🌿',name:'Level 2',sub:'Mein Alltag'},
   {n:3,icon:'🌳',name:'Level 3',sub:'Die Welt um mich'},
-  {n:4,icon:'🏆',name:'Level 4',sub:'Reden und fragen'}
+  {n:4,icon:'🏆',name:'Level 4',sub:'Reden und fragen'},
+  {n:5,icon:'🚀',name:'Level 5',sub:'Mehr sagen'},
+  {n:6,icon:'🌍',name:'Level 6',sub:'Unterwegs in der Welt'},
+  {n:7,icon:'💎',name:'Level 7',sub:'Englisch-Profi'}
 ];
 
-/* Sticker-Album: Sticker mit Sternen freischalten (cost). Spezial-Sticker gibt es für bestandene Level-Tests.
+/* Sticker-Album: Sticker mit Sternen freischalten (cost). Packs mit need öffnen sich erst nach bestandenem
+   Test dieses Levels. Spezial-Sticker gibt es für bestandene Level-Tests.
    Bestehende Emojis nicht ändern: daran hängt der Spielstand. */
 const STICKER_PACKS=[
-  {name:'Tierfreunde',cost:5,items:[['🦊','Fuchs'],['🐼','Panda'],['🐨','Koala'],['🦔','Igel'],['🐙','Krake'],['🦋','Schmetterling'],['🐢','Schildkröte'],['🦉','Eule']]},
-  {name:'Unterwegs',cost:8,items:[['🏎️','Rennauto'],['🚂','Dampflok'],['🛸','Ufo'],['🚤','Schnellboot'],['🛶','Kanu'],['🏍️','Motorrad'],['🪂','Fallschirm'],['🚡','Gondel']]},
-  {name:'Leckereien',cost:10,items:[['🍩','Donut'],['🧁','Cupcake'],['🍉','Wassermelone'],['🥨','Brezel'],['🍿','Popcorn'],['🍭','Lolli'],['🥞','Pfannkuchen'],['🍪','Guetzli']]},
-  {name:'Fantasie',cost:15,items:[['🧚','Fee'],['🦖','Dino'],['🧜‍♀️','Meerjungfrau'],['🤖','Roboter'],['👽','Ausserirdischer'],['🧙','Zauberer'],['🐲','Drache'],['👻','Gespenst']]}
+  {name:'Tierfreunde',cost:10,items:[['🦊','Fuchs'],['🐼','Panda'],['🐨','Koala'],['🦔','Igel'],['🐙','Krake'],['🦋','Schmetterling'],['🐢','Schildkröte'],['🦉','Eule']]},
+  {name:'Unterwegs',cost:15,items:[['🏎️','Rennauto'],['🚂','Dampflok'],['🛸','Ufo'],['🚤','Schnellboot'],['🛶','Kanu'],['🏍️','Motorrad'],['🪂','Fallschirm'],['🚡','Gondel']]},
+  {name:'Leckereien',cost:20,items:[['🍩','Donut'],['🧁','Cupcake'],['🍉','Wassermelone'],['🥨','Brezel'],['🍿','Popcorn'],['🍭','Lolli'],['🥞','Pfannkuchen'],['🍪','Guetzli']]},
+  {name:'Fantasie',cost:30,items:[['🧚','Fee'],['🦖','Dino'],['🧜‍♀️','Meerjungfrau'],['🤖','Roboter'],['👽','Ausserirdischer'],['🧙','Zauberer'],['🐲','Drache'],['👻','Gespenst']]},
+  {name:'Unter Wasser',cost:40,need:4,items:[['🐳','Wal'],['🐬','Delfin'],['🦈','Hai'],['🐠','Tropenfisch'],['🪼','Qualle'],['🦭','Robbe'],['🐚','Muschel'],['🦑','Tintenfisch']]},
+  {name:'Sport',cost:50,need:5,items:[['🏄','Surfen'],['🧗','Klettern'],['🤸','Turnen'],['🏇','Reiten'],['🛹','Skateboard'],['🥋','Judo'],['🏹','Bogenschiessen'],['🥇','Goldmedaille']]},
+  {name:'Weltraum',cost:60,need:6,items:[['🌠','Sternschnuppe'],['🌌','Milchstrasse'],['🪐','Saturn'],['🛰️','Satellit'],['☄️','Komet'],['🌑','Neumond'],['🔭','Teleskop'],['🧑‍🚀','Astronautin']]},
+  {name:'Schatzkiste',cost:80,need:7,items:[['💎','Diamant'],['🏆','Pokal'],['🪙','Münze'],['💰','Goldsack'],['🔮','Kristallkugel'],['🗝️','Alter Schlüssel'],['📜','Schatzkarte'],['⚜️','Lilie']]}
 ];
-const LEVEL_STICKERS={1:['🦄','Einhorn'],2:['🌈','Regenbogen'],3:['🐉','Glücksdrache'],4:['👑','Krone']};
+const LEVEL_STICKERS={1:['🦄','Einhorn'],2:['🌈','Regenbogen'],3:['🐉','Glücksdrache'],4:['👑','Krone'],
+  5:['🦚','Pfau'],6:['🗽','Freiheitsstatue'],7:['🏰','Schloss']};
 const NUM_EN=['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'];
 const NUM_DE=['eins','zwei','drei','vier','fünf','sechs','sieben','acht','neun','zehn','elf','zwölf','dreizehn','vierzehn','fünfzehn','sechzehn','siebzehn','achtzehn','neunzehn','zwanzig'];
 const W=(en,de,e)=>({en,de,e});
@@ -173,6 +182,81 @@ const THEMES=[
     S('It is snowing.','Es schneit.','❄️'),S('It is windy.','Es ist windig.','💨'),
     S('It is cloudy.','Es ist bewölkt.','☁️'),S('It is cold.','Es ist kalt.','🥶'),
     S('It is hot.','Es ist heiss.','🥵'),S("What's the weather like?",'Wie ist das Wetter?','❓🌦️')
+  ]},
+
+  /* Level 5 */
+  {id:'jobs',level:5,kind:'words',name:'Berufe',icon:'🧑‍🚒',color:'var(--tang)',items:[
+    W('doctor','Ärztin','👩‍⚕️'),W('farmer','Bauer','🧑‍🌾'),W('cook','Koch','🧑‍🍳'),W('firefighter','Feuerwehrfrau','🧑‍🚒'),
+    W('police officer','Polizist','👮'),W('pilot','Pilot','🧑‍✈️'),W('astronaut','Astronautin','🧑‍🚀'),W('artist','Künstlerin','🧑‍🎨'),
+    W('singer','Sänger','🧑‍🎤'),W('mechanic','Mechanikerin','🧑‍🔧')
+  ]},
+  {id:'opposites',level:5,kind:'words',name:'Gegensätze',icon:'↔️',color:'var(--grape)',items:[
+    W('hot','heiss','🔥'),W('cold','kalt','🧊'),W('fast','schnell','🐆'),W('slow','langsam','🐢'),
+    W('day','Tag','🌞'),W('night','Nacht','🌃'),W('up','oben','⬆️'),W('down','unten','⬇️'),
+    W('loud','laut','📢'),W('quiet','leise','🤫'),W('open','offen','🔓'),W('closed','geschlossen','🔒')
+  ]},
+  {id:'s-doing',level:5,kind:'sentences',name:'Was machst du gerade?',icon:'🏃',color:'var(--grass)',items:[
+    S('I am running.','Ich renne gerade.','🏃'),S('I am eating.','Ich esse gerade.','🍽️'),
+    S('I am sleeping.','Ich schlafe gerade.','😴'),S('I am reading a book.','Ich lese gerade ein Buch.','📖'),
+    S('I am drawing a picture.','Ich zeichne gerade ein Bild.','✏️🖼️'),S('I am singing a song.','Ich singe gerade ein Lied.','🎵'),
+    S('I am cooking.','Ich koche gerade.','🍳'),S('What are you doing?','Was machst du gerade?','❓🤷')
+  ]},
+  {id:'s-want',level:5,kind:'sentences',name:'Ich will, ich brauche',icon:'🙋',color:'var(--sky)',items:[
+    S('I want a drink.','Ich will etwas trinken.','🥤'),S('I want to play.','Ich will spielen.','🎮'),
+    S('I need help.','Ich brauche Hilfe.','🆘'),S('I need a pencil.','Ich brauche einen Bleistift.','✏️'),
+    S('I want to go home.','Ich will nach Hause gehen.','🏠'),S('I am thirsty.','Ich habe Durst.','💧'),
+    S('I am cold.','Mir ist kalt.','🥶'),S('Can you help me, please?','Kannst du mir bitte helfen?','🙏')
+  ]},
+
+  /* Level 6 */
+  {id:'town',level:6,kind:'words',name:'In der Stadt',icon:'🏙️',color:'var(--sky)',items:[
+    W('shop','Laden','🏪'),W('hospital','Spital','🏥'),W('station','Bahnhof','🚉'),W('library','Bibliothek','📚'),
+    W('bank','Bank','🏦'),W('church','Kirche','⛪'),W('castle','Schloss','🏰'),W('playground','Spielplatz','🛝'),
+    W('museum','Museum','🏛️'),W('cinema','Kino','🎬'),W('restaurant','Restaurant','🍽️'),W('post office','Post','🏤')
+  ]},
+  {id:'countries',level:6,kind:'words',name:'Länder',icon:'🗺️',color:'var(--berry)',items:[
+    W('Switzerland','Schweiz','🇨🇭'),W('Germany','Deutschland','🇩🇪'),W('France','Frankreich','🇫🇷'),W('Italy','Italien','🇮🇹'),
+    W('Britain','Grossbritannien','🇬🇧'),W('America','Amerika','🇺🇸'),W('Spain','Spanien','🇪🇸'),W('Japan','Japan','🇯🇵'),
+    W('China','China','🇨🇳'),W('Brazil','Brasilien','🇧🇷')
+  ]},
+  {id:'s-way',level:6,kind:'sentences',name:'Den Weg zeigen',icon:'🧭',color:'var(--grass)',items:[
+    S('Go straight on.','Geh geradeaus.','⬆️'),S('Turn left.','Bieg links ab.','⬅️'),
+    S('Turn right.','Bieg rechts ab.','➡️'),S('Where is the station?','Wo ist der Bahnhof?','🚉❓'),
+    S('It is near the park.','Es ist beim Park.','🌳📍'),S('Stop here.','Halt hier an.','🛑'),
+    S('Cross the street.','Überquere die Strasse.','🚸'),S('It is not far.','Es ist nicht weit.','👣')
+  ]},
+  {id:'s-past',level:6,kind:'sentences',name:'Gestern',icon:'⏪',color:'var(--tang)',items:[
+    S('Yesterday I played football.','Gestern habe ich Fussball gespielt.','⚽'),S('I went to the zoo.','Ich bin in den Zoo gegangen.','🦁'),
+    S('I ate a pizza.','Ich habe eine Pizza gegessen.','🍕'),S('I saw a rainbow.','Ich habe einen Regenbogen gesehen.','🌈'),
+    S('I was very happy.','Ich war sehr fröhlich.','😊'),S('We watched a film.','Wir haben einen Film geschaut.','🎬'),
+    S('I visited my grandma.','Ich habe meine Grossmutter besucht.','👵'),S('It was sunny.','Es war sonnig.','☀️')
+  ]},
+
+  /* Level 7 */
+  {id:'music',level:7,kind:'words',name:'Musik',icon:'🎸',color:'var(--berry)',items:[
+    W('guitar','Gitarre','🎸'),W('piano','Klavier','🎹'),W('drum','Trommel','🥁'),W('violin','Geige','🎻'),
+    W('trumpet','Trompete','🎺'),W('saxophone','Saxofon','🎷'),W('accordion','Handorgel','🪗'),W('banjo','Banjo','🪕')
+  ]},
+  {id:'space',level:7,kind:'words',name:'Weltall',icon:'🪐',color:'var(--grape)',items:[
+    W('earth','Erde','🌍'),W('moon','Mond','🌕'),W('star','Stern','🌟'),W('planet','Planet','🪐'),
+    W('rocket','Rakete','🚀'),W('comet','Komet','☄️'),W('telescope','Teleskop','🔭'),W('satellite','Satellit','🛰️'),
+    W('alien','Ausserirdischer','👽')
+  ]},
+  {id:'s-future',level:7,kind:'sentences',name:'Morgen',icon:'⏩',color:'var(--sky)',items:[
+    S('Tomorrow I will go swimming.','Morgen gehe ich schwimmen.','🏊'),S('I will be a doctor.','Ich werde Ärztin.','👩‍⚕️'),
+    S('We will go on holiday.','Wir werden in die Ferien fahren.','✈️🏖️'),S('It will rain tomorrow.','Morgen wird es regnen.','🌧️'),
+    S('I will call my friend.','Ich werde meine Freundin anrufen.','📞'),S('We will have a party.','Wir werden ein Fest feiern.','🎉'),
+    S('I will learn to ski.','Ich werde Skifahren lernen.','⛷️'),S('I will read a new book.','Ich werde ein neues Buch lesen.','📚')
+  ]},
+  {id:'s-compare',level:7,kind:'sentences',name:'Vergleichen',icon:'⚖️',color:'var(--tang)',items:[
+    S('An elephant is bigger than a mouse.','Ein Elefant ist grösser als eine Maus.','🐘🐭'),
+    S('A cheetah is faster than a snail.','Ein Gepard ist schneller als eine Schnecke.','🐆🐌'),
+    S('The sun is hotter than the moon.','Die Sonne ist heisser als der Mond.','☀️🌙'),
+    S('My brother is taller than me.','Mein Bruder ist grösser als ich.','👦📏'),
+    S('Winter is colder than summer.','Der Winter ist kälter als der Sommer.','❄️🌞'),
+    S('A plane is faster than a car.','Ein Flugzeug ist schneller als ein Auto.','✈️🚗'),
+    S('The blue whale is the biggest animal.','Der Blauwal ist das grösste Tier.','🐋'),
+    S('This is the best day ever!','Das ist der beste Tag überhaupt!','🥳')
   ]}
 ];
 
@@ -232,6 +316,32 @@ const STORIES=[
     Q('Where does Emma look first?','Wo schaut Emma zuerst?',['under the bed','in the kitchen','in the car']),
     Q('What does Emma hear?','Was hört Emma?',['Meow!','Woof!','Quack!']),
     Q('Where is Luna?','Wo ist Luna?',['in the box','on the bed','in the tree'])
+  ]},
+  {id:'beach-holiday',level:5,title:'Ferien am Meer',icon:'🏖️',pages:[
+    P('It is summer. Ben and his family are on holiday.','Es ist Sommer. Ben und seine Familie sind in den Ferien.','☀️👨‍👩‍👦'),
+    P('They go to the beach every day.','Sie gehen jeden Tag an den Strand.','🏖️'),
+    P('Ben swims in the sea with his dad.','Ben schwimmt mit seinem Papa im Meer.','🏊🌊'),
+    P('His mum reads a book under an umbrella.','Seine Mama liest ein Buch unter einem Sonnenschirm.','👩📖⛱️'),
+    P('Ben finds a little crab. It is red.','Ben findet eine kleine Krabbe. Sie ist rot.','🦀'),
+    P('In the evening they eat fish and ice cream.','Am Abend essen sie Fisch und Glace.','🐟🍦')
+  ],questions:[
+    Q('What season is it?','Welche Jahreszeit ist es?',['summer','winter','autumn']),
+    Q('Who swims with Ben?','Wer schwimmt mit Ben?',['his dad','his mum','his sister']),
+    Q('What does Ben find?','Was findet Ben?',['a crab','a fish','a ball']),
+    Q('What colour is the crab?','Welche Farbe hat die Krabbe?',['red','green','blue'])
+  ]},
+  {id:'moon-trip',level:7,title:'Reise zum Mond',icon:'🚀',pages:[
+    P('Anna wants to be an astronaut.','Anna will Astronautin werden.','👧🧑‍🚀'),
+    P('One night she builds a rocket in the garden.','Eines Nachts baut sie eine Rakete im Garten.','🌙🚀'),
+    P('Three, two, one … the rocket flies to the moon!','Drei, zwei, eins … die Rakete fliegt zum Mond!','🚀🌕'),
+    P('On the moon she meets a friendly alien.','Auf dem Mond trifft sie einen freundlichen Ausserirdischen.','👽👋'),
+    P('They play football with a small stone.','Sie spielen Fussball mit einem kleinen Stein.','⚽🪨'),
+    P('Then Anna flies home. What a great dream!','Dann fliegt Anna nach Hause. Was für ein toller Traum!','🏠😴')
+  ],questions:[
+    Q('What does Anna want to be?','Was will Anna werden?',['an astronaut','a doctor','a teacher']),
+    Q('Where does she build the rocket?','Wo baut sie die Rakete?',['in the garden','in the kitchen','at school']),
+    Q('Who does she meet on the moon?','Wen trifft sie auf dem Mond?',['an alien','a dog','her grandma']),
+    Q('What do they play?','Was spielen sie?',['football','tennis','hide and seek'])
   ]}
 ];
 
@@ -265,5 +375,18 @@ const DIALOGS=[
     T_('Oh, it is {weather}! What do you want to do today?','Oh, es ist {weather}! Was willst du heute machen?',['i want to {any}',"i'd like to {any}",'play {any}','go {any}','{any}'],'I want to play football.','Ich will …'),
     T_('That sounds great! Can I come too?','Das klingt super! Darf ich mitkommen?',['yes','sure','of course','okay','no'],'Yes, of course!','Ja, klar!'),
     T_('Yay! See you later!','Juhu! Bis später!',['see you','bye','goodbye','later'],'See you later!','Bis später!')
+  ]},
+  {id:'doctor',level:5,title:'Beim Arzt',icon:'🩺',who:'Dr. Lee',face:'👩‍⚕️',turns:[
+    T_("Hello! What's the matter?",'Hallo! Was fehlt dir?',['{body}','i am sick','i feel sick','i have a cold','i am ill'],'My head hurts.','Mein … tut weh.'),
+    T_('Oh, your {body}! Let me see. How old are you?','Oh, dein … ! Lass mich schauen. Wie alt bist du?',['{number}'],'I am eight.','Ich bin … Jahre alt.'),
+    T_('Do you eat fruit and vegetables?','Isst du Früchte und Gemüse?',['yes','no','sometimes','i do',"i don't",'{food}'],'Yes, I do!','Ja!'),
+    T_('Good! Drink some water and go to bed early.','Gut! Trink etwas Wasser und geh früh ins Bett.',['okay','ok','thank you','thanks','yes','i will'],'Okay, thank you!','Okay, danke!'),
+    T_('Get well soon! Goodbye!','Gute Besserung! Auf Wiedersehen!',['goodbye','bye','thank you','thanks'],'Thank you! Goodbye!','Danke! Tschüss!')
+  ]},
+  {id:'directions',level:6,title:'Wo ist der Bahnhof?',icon:'🧭',who:'Kim',face:'👩‍🦰',turns:[
+    T_('Excuse me! Where is the station, please?','Entschuldigung! Wo ist bitte der Bahnhof?',['straight','left','right','over there','near','next to','it is {any}'],'Go straight on and turn left.','Geh geradeaus und dann links.'),
+    T_('Thank you! Is it far?','Danke! Ist es weit?',['no','yes','not far','near','{number} minutes','close'],'No, it is not far.','Nein, es ist nicht weit.'),
+    T_('Great! Where are you from?','Super! Woher kommst du?',['{country}'],'I am from Switzerland.','Ich komme aus …'),
+    T_('Oh, {country}! Cool! Have a nice day!','Oh, {country}! Cool! Einen schönen Tag!',['you too','thank you','thanks','bye','goodbye'],'You too! Bye!','Dir auch! Tschüss!')
   ]}
 ];

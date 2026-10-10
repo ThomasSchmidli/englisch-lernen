@@ -281,17 +281,25 @@ test('Heute üben läuft durch und zählt die Serie',async({page})=>{
 });
 
 test('Sticker-Album: kaufen braucht zwei Tipps und genug Sterne',async({page})=>{
-  await start(page,{stars:6,known:{}});
+  await start(page,{stars:12,known:{}});
   await page.locator('[data-go="album"]').click();
   const fox=page.locator('[data-buy="🦊"]');
   await fox.click();
   await expect(fox).toContainText('Nochmal tippen');
   await fox.click();
   await expect(page.locator('.newstk')).toContainText('🦊');
-  await expect(page.locator('.stars')).toContainText('1');
+  await expect(page.locator('.stars')).toContainText('2');
   const dino=page.locator('[data-buy="🦖"]');
   await dino.click();
-  await expect(dino).toContainText('noch 14');
+  await expect(dino).toContainText('noch 28');
+});
+
+test('Sticker-Album: späte Packs öffnen sich erst nach dem Level-Test',async({page})=>{
+  await start(page,{stars:500,known:{},tests:{'level:4':{best:80}}});
+  await page.locator('[data-go="album"]').click();
+  await expect(page.locator('[data-buy="🐳"]')).toBeVisible();          // Unter Wasser: Level 4 bestanden
+  await expect(page.locator('[data-buy="🏄"]')).toHaveCount(0);         // Sport: Level 5 noch nicht
+  await expect(page.locator('.stk.closed').first()).toContainText('Level 5');
 });
 
 test('Sprechen mit Eltern-Check',async({page})=>{
