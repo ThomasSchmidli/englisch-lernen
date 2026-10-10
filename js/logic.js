@@ -9,13 +9,15 @@ function addDays(s,n){const [y,m,d]=s.split('-').map(Number); return fmt(new Dat
 
 /* Spielstand: stars, known (gelernt pro Thema), srs (Wiederholung pro Eintrag), streak (Tage hintereinander),
    bonus (Datum der letzten Extra-Sterne), tests (bestes Ergebnis pro Test, z. B. 'theme:animals' oder 'level:1'),
-   stickers (freigeschaltete Sticker-Emojis), earned (alle je verdienten Sterne; stars ist das, was noch übrig ist) */
-const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:'',tests:{},stickers:[],earned:0});
+   stickers (freigeschaltete Sticker-Emojis), earned (alle je verdienten Sterne; stars ist das, was noch übrig ist),
+   speak (Sprechversuche n und davon erkannt ok, für die Übersicht der Eltern) */
+const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:'',tests:{},stickers:[],earned:0,speak:{n:0,ok:0}});
 /* Gespeicherte Daten (auch ältere Formate und Sicherungen) in die aktuelle Form bringen */
 function normalize(d,day=today()){
   if(!d||typeof d!=='object'||typeof d.stars!=='number'||typeof (d.known||{})!=='object') return null;
   const x={stars:d.stars||0,known:d.known||{},srs:d.srs||{},streak:d.streak||{n:0,last:''},bonus:d.bonus||'',tests:d.tests||{},
-    stickers:Array.isArray(d.stickers)?d.stickers:[],earned:typeof d.earned==='number'?d.earned:d.stars||0};
+    stickers:Array.isArray(d.stickers)?d.stickers:[],earned:typeof d.earned==='number'?d.earned:d.stars||0,
+    speak:d.speak&&typeof d.speak.n==='number'?d.speak:{n:0,ok:0}};
   // Übernahme aus v1 ohne Wiederholung: Gelerntes kommt heute zum ersten Mal wieder
   for(const tid in x.known) for(const en of x.known[tid]){const k=tid+'|'+en; if(!x.srs[k]) x.srs[k]={l:1,d:day};}
   return x;
@@ -93,4 +95,52 @@ function levelReward(d,level,passed,rewards){
   const r=rewards[level];
   if(!passed||!r||d.stickers.includes(r[0])) return null;
   d.stickers.push(r[0]); return r[0];
+}
+
+/* Rückmeldung pro Wort: welche Wörter des Ziels in der Erkennung vorkommen (für die Anzeige grün/rot) */
+function wordMatch(target,heard){
+  const aw=new Set(norm(heard).split(' '));
+  return target.split(/\s+/).filter(Boolean).map(w=>{
+    const n=norm(w).split(' '); // «It's» → «it is»
+    return {w,ok:n.every(x=>!x||aw.has(x)||(SOUNDS[x]||[]).some(y=>aw.has(y)))};
+  });
+}
+
+/* Gespräche: Antwortmuster mit freien Teilen, z. B. 'my name is {name}' oder 'i like {food}'.
+   Liefert {ok, slots} – slots enthält, was an den freien Stellen gesagt wurde (z. B. {name:'lena'}). */
+function slotPattern(slot){
+  const items=ids=>THEMES.filter(t=>ids.includes(t.id)).flatMap(t=>t.items.map(i=>norm(i.en)));
+  const alt=list=>'('+[...new Set(list)].sort((a,b)=>b.length-a.length).map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')';
+  const plural=list=>list.flatMap(x=>[x,x+'s',x+'es']);
+  switch(slot){
+    case 'name': return "([a-z']+(?: [a-z']+)?)";
+    case 'number': return alt(NUM_EN);
+    case 'color': return alt(items(['colors']).concat(['gray']));
+    case 'animal': return "(?:a |an |the )?"+alt(plural(items(['animals','zoo'])));
+    case 'food': return "(?:a |an |some |the )?"+alt(plural(items(['food'])));
+    case 'weather': return alt(['sunny','raining','rainy','snowing','snowy','windy','cloudy','cold','hot','warm','nice','foggy']);
+    case 'any': return '(.+)';
+    default: throw new Error('Unbekannter Platzhalter '+slot);
+  }
+}
+function dialogMatch(heard,answers){
+  const h=' '+norm(heard)+' ';
+  for(const a of answers){
+    const names=[];
+    // Platzhalter als reine Buchstaben (qqslota, qqslotb …), weil norm() Ziffern und Zeichen entfernt
+    const re=' '+norm(a.replace(/\{(\w+)\}/g,(m,n)=>{names.push(n); return ' qqslot'+'abcdefgh'[names.length-1]+' ';}))+' ';
+    const src=re.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/qqslot([a-h])/g,(m,c)=>slotPattern(names['abcdefgh'.indexOf(c)]));
+    const m=h.match(new RegExp(src));
+    if(m){const slots={}; names.forEach((n,i)=>slots[n]=m[i+1].trim()); return {ok:true,slots};}
+  }
+  return {ok:false,slots:{}};
+}
+/* {name} usw. in einem Satz der Figur durch das Gesagte ersetzen (Namen mit grossem Anfangsbuchstaben) */
+const SLOT_DEFAULT={name:'friend',number:'that',color:'That colour',animal:'that animal',food:'that',weather:'nice',any:'that'};
+function fillSlots(text,slots){
+  const t=text.replace(/\{(\w+)\}/g,(m,n)=>{
+    const v=slots[n]; if(!v) return SLOT_DEFAULT[n]||'';
+    return n==='name'?v.replace(/\b[a-z]/g,c=>c.toUpperCase()):v;
+  }).replace(/\s+([,!?.])/g,'$1').replace(/\s{2,}/g,' ').trim();
+  return t.charAt(0).toUpperCase()+t.slice(1);
 }

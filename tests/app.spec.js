@@ -43,7 +43,8 @@ async function playUntilEnd(page,max=60){
 test('Startseite: Levels, Themen, Album, Version',async({page})=>{
   await start(page);
   const n=await page.evaluate(()=>({levels:LEVELS.length,themes:THEMES.length}));
-  await expect(page.locator('h3.sec')).toHaveCount(n.levels+1); // plus Geschichten
+  await expect(page.locator('h3.sec')).toHaveCount(n.levels+2); // plus Geschichten und Gespräche
+  await expect(page.locator('[data-go^="dialog:"]')).toHaveCount(await page.evaluate(()=>DIALOGS.length));
   await expect(page.locator('[data-go^="story:"]')).toHaveCount(await page.evaluate(()=>STORIES.length));
   await expect(page.locator('[data-go^="theme:"]')).toHaveCount(n.themes);
   await expect(page.locator('[data-go^="ltest:"]')).toHaveCount(n.levels);
@@ -150,6 +151,75 @@ test('Aufgabe «Sag es auf Englisch»: falsch, dann richtig; Weiss ich nicht; Mi
   await expect(page.locator('.fb')).toContainText('zählt nicht');
   await wait(page);
   expect(await page.evaluate(()=>window.__done)).toEqual([true,false,null]);
+});
+
+/* Erkennung vortäuschen: liefert nacheinander die Texte aus window.__heard (frei oder geprüft wie die App) */
+const fakeHearing=page=>page.evaluate(()=>{
+  window.__heard=[];
+  window.hearLocal=(st,lv,target,pool,sentence)=>{
+    const a=window.__heard.shift()||'';
+    const res=target==null?{alts:[a],ok:null}:{alts:[a],ok:heardOK(target,[a],sentence)};
+    return {result:Promise.resolve(a?res:{error:'no-speech'}),stop(){}};
+  };
+});
+
+test('Gespräch: freie Antworten, Figur verwendet den Namen, unpassende Antwort, Ergebnis',async({page})=>{
+  await start(page);
+  await fakeHearing(page);
+  await page.locator('[data-go="dialog:hello"]').click();
+  await expect(page.locator('.bub.them').first()).toContainText("What's your name?");
+  const say=async t=>{await page.evaluate(x=>window.__heard.push(x),t); await expect(page.locator('#dmic')).toBeEnabled(); await page.locator('#dmic').click();};
+  await say('My name is Lena.');
+  await expect(page.locator('.bub.me').first()).toContainText('My name is Lena.');
+  await wait(page);
+  await expect(page.locator('.bub.them').nth(1)).toContainText('Nice to meet you, Lena!');
+  await say('banana');
+  await expect(page.locator('.fb')).toContainText('passt noch nicht');
+  await say("I'm fine, thank you.");
+  await wait(page);
+  await say("I'm 8.");
+  await wait(page);
+  await expect(page.locator('.bub.them').nth(3)).toContainText('Goodbye, Lena!');
+  await say('Bye!');
+  await wait(page,4000);
+  await expect(page.locator('.end')).toContainText('4 von 4');
+  const d=await page.evaluate(()=>JSON.parse(localStorage.getItem('englisch-lernen-v1')));
+  expect(d.tests['dialog:hello'].best).toBe(100);
+  expect(d.speak).toEqual({n:5,ok:4});
+});
+
+test('Gespräch mit Eltern-Check',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('englisch-lernen-mic',JSON.stringify({v:5,input:'parent'})));
+  await start(page);
+  await page.evaluate(()=>go('dialog:weather-talk'));
+  for(let i=0;i<4;i++){
+    await page.locator('#said').click(); await page.locator('#yes').click(); await wait(page);
+    if(i===0) await expect(page.locator('.bub.them').nth(1)).toContainText('it is nice'); // Ersatz, weil nichts erkannt wurde
+  }
+  await wait(page,4000);
+  await expect(page.locator('.end')).toContainText('4 von 4');
+});
+
+test('Geschichte selbst vorlesen und Wort-Rückmeldung beim Sprechen',async({page})=>{
+  await start(page);
+  await fakeHearing(page);
+  await page.evaluate(()=>go('story:zoo-day:0'));
+  // ein falsches Wort in einem langen Satz ist erlaubt, ein halber Satz nicht
+  await page.evaluate(()=>window.__heard.push('This is Tom.','This is Tom. Tom is eight years old.'));
+  await expect(page.locator('#rmic')).toBeEnabled();
+  await page.locator('#rmic').click();
+  await expect(page.locator('#wfb .wmiss')).toHaveText(['eight','years','old.']);
+  await page.locator('#rmic').click();
+  await expect(page.locator('.readaloud .fb')).toContainText('Toll vorgelesen');
+  await expect(page.locator('#wfb .wmiss')).toHaveCount(0);
+  // Sprechen (Sätze): fehlendes Wort wird rot
+  await page.evaluate(()=>{go('speak:s-can');});
+  const target=await page.locator('.stage .word').textContent();
+  await page.evaluate(()=>window.__heard.push('I can'));
+  await expect(page.locator('#lmic')).toBeEnabled();
+  await page.locator('#lmic').click();
+  await expect(page.locator('#wfb .wok')).toHaveText(['I','can']);
+  await expect(page.locator('#wfb .wmiss').first()).toBeVisible();
 });
 
 test('Geschichte lesen und Fragen beantworten',async({page})=>{

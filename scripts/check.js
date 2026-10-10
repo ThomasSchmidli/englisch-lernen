@@ -4,8 +4,8 @@ const root=path.join(__dirname,'..');
 const errors=[], err=m=>errors.push(m);
 
 const ctx={}; vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8')+'\nthis.THEMES=THEMES; this.LEVELS=LEVELS; this.STORIES=STORIES;',ctx);
-const THEMES=ctx.THEMES, LEVELS=ctx.LEVELS, STORIES=ctx.STORIES;
+vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8')+'\nthis.THEMES=THEMES; this.LEVELS=LEVELS; this.STORIES=STORIES; this.DIALOGS=DIALOGS;',ctx);
+const THEMES=ctx.THEMES, LEVELS=ctx.LEVELS, STORIES=ctx.STORIES, DIALOGS=ctx.DIALOGS;
 
 const ids=new Set();
 for(const t of THEMES){
@@ -47,6 +47,21 @@ for(const st of STORIES){
   if(/ß/.test(JSON.stringify(st))) err(`${where}: «ß» statt «ss»`);
 }
 
+const dids=new Set();
+for(const d of DIALOGS){
+  const where=`Gespräch «${d.id}»`;
+  if(!d.id||dids.has(d.id)) err(`${where}: id fehlt oder ist doppelt`); dids.add(d.id);
+  if(!LEVELS.some(l=>l.n===d.level)) err(`${where}: level fehlt oder ist unbekannt`);
+  for(const k of ['title','icon','who','face']) if(!d[k]) err(`${where}: ${k} fehlt`);
+  if(!Array.isArray(d.turns)||d.turns.length<2) err(`${where}: braucht mindestens 2 Schritte`);
+  for(const t of d.turns||[]){
+    if(!t.say||!t.de||!t.example||!t.hint||!Array.isArray(t.answers)||!t.answers.length) err(`${where}: Schritt unvollständig («${t.say}»)`);
+    for(const a of t.answers||[]) for(const m of a.matchAll(/\{(\w+)\}/g))
+      if(!['name','number','color','animal','food','weather','any'].includes(m[1])) err(`${where}: unbekannter Platzhalter {${m[1]}}`);
+  }
+  if(/ß/.test(JSON.stringify(d))) err(`${where}: «ß» statt «ss»`);
+}
+
 const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
 const files=(sw.match(/const FILES=\[([\s\S]*?)\];/)||[])[1]||'';
 for(const f of files.match(/'[^']+'/g)||[]){
@@ -56,4 +71,4 @@ for(const f of files.match(/'[^']+'/g)||[]){
 
 if(errors.length){console.error(errors.map(e=>'✗ '+e).join('\n')); process.exit(1);}
 const n=THEMES.reduce((a,t)=>a+t.items.length,0);
-console.log(`✓ ${THEMES.length} Themen, ${n} Einträge, ${STORIES.length} Geschichten, alles in Ordnung`);
+console.log(`✓ ${THEMES.length} Themen, ${n} Einträge, ${STORIES.length} Geschichten, ${DIALOGS.length} Gespräche, alles in Ordnung`);

@@ -1,7 +1,7 @@
 /* Anzeige und Ablauf der App: Navigation, Spiele, Tests, Sprachausgabe, Aufnahme, Spielstand.
    Reine Logik (Datum, Wiederholung, Sprachvergleich, Auswertung) liegt in js/logic.js. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='12';
+const VERSION='13';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 /* Spielstand im Browser (Schlüssel nicht ändern, sonst beginnt der Spielstand bei null) */
@@ -136,6 +136,7 @@ function storyTile(st){
     <span class="meta">${L(st.level).icon} ${L(st.level).name} · ${st.pages.length} Seiten${best?` · Fragen: ${best} %`:''}</span></span>
   </button>`;
 }
+const readStars=new Set(); // Seiten, für die es in dieser Sitzung schon einen Stern fürs Vorlesen gab
 function story(id,i){
   const st=S_(id), n=st.pages.length; i=Math.max(0,Math.min(n-1,i)); const p=st.pages[i], last=i===n-1;
   app.innerHTML=`${topbar('home',st.title)}
@@ -147,8 +148,26 @@ function story(id,i){
     <button class="btn round" id="slow" aria-label="Langsam vorlesen">🐢</button>
     ${last?`<button class="btn sun" data-go="storyq:${id}">Fragen ▶</button>`:`<button class="btn round" data-go="story:${id}:${i+1}" aria-label="Weiter">▶</button>`}
   </div>
+  ${canSpeak()?`<div class="readaloud">
+    <div class="ctrl"><button class="btn mic sun" id="rmic" aria-label="Selbst vorlesen">🎤</button><button class="btn round" id="me" hidden aria-label="Meine Aufnahme anhören">🎧</button></div>
+    <p class="hint" id="hint">Lies den Satz selbst vor: tipp aufs Mikrofon.</p>
+    <p class="wordfb" id="wfb" hidden></p><p class="fb" aria-live="polite"></p></div>`:''}
   <button class="btn small skip" id="showde">Auf Deutsch zeigen</button>`;
   const sde=document.getElementById('sde'), showde=document.getElementById('showde');
+  const rmic=document.getElementById('rmic');
+  if(rmic){
+    const fb=app.querySelector('.readaloud .fb'), key=id+':'+i;
+    attachMic({btn:rmic,me:document.getElementById('me'),hint:document.getElementById('hint'),target:p.en,
+      pool:st.pages.map(x=>x.en),sentence:true,idle:'Lies den Satz selbst vor: tipp aufs Mikrofon.',isDone:()=>false,
+      onResult:res=>{
+        if(res.error){fb.textContent=res.error==='not-allowed'?'Das Mikrofon ist nicht freigegeben.':micErrorText(res.error); return;}
+        showWordFb(document.getElementById('wfb'),p.en,res.alts[0],res.ok);
+        if(res.ok){
+          fb.textContent=pick(PRAISE)+' Toll vorgelesen!';
+          if(!readStars.has(key)){readStars.add(key); addStars(1); starFly(rmic);}
+        }else fb.textContent='Fast! Hör nochmal zu (🔊 oder 🐢) und probier es wieder.';
+      }});
+  }
   showde.onclick=()=>{sde.hidden=!sde.hidden; showde.textContent=sde.hidden?'Auf Deutsch zeigen':'Deutsch verstecken';};
   const s=slow=>{speak(p.en,slow); pop(app.querySelector('.stage .lg'));};
   document.getElementById('say').onclick=()=>s();
@@ -185,6 +204,83 @@ function storyQuiz(id){
   round();
 }
 
+/* Gespräche: die Figur sagt etwas, das Kind antwortet frei (Muster mit freien Teilen, js/logic.js dialogMatch).
+   Was das Kind sagt (Name, Farbe …), verwendet die Figur später. Zwei Versuche, dann «Weiter». */
+const D_=id=>DIALOGS.find(x=>x.id===id);
+function dialogTile(d){
+  const best=bestOf('dialog:'+d.id);
+  return `<button class="btn tile" data-go="dialog:${d.id}">
+    <span class="icon" style="background:var(--sky)">${d.icon}</span>
+    <span class="tx"><span class="name">${d.title} ${medalBadge('dialog:'+d.id)}</span>
+    <span class="meta">${L(d.level).icon} ${L(d.level).name} · mit ${d.who}${best?` · ${best} %`:''}</span></span>
+  </button>`;
+}
+function dialogPlay(id){
+  const d=D_(id), n=d.turns.length, slots={}; let r=0, got=0;
+  const local=canSpeak();
+  app.innerHTML=`${topbar('home',d.title)}
+  <div class="chat" id="chat" aria-live="polite"></div>
+  <div class="turn" id="turn"></div>`;
+  const chat=document.getElementById('chat'), turnEl=document.getElementById('turn');
+  const bubble=(who,html)=>{chat.insertAdjacentHTML('beforeend',who==='them'
+    ?`<div class="bub them"><span class="face" aria-hidden="true">${d.face}</span><span class="txt">${html}</span></div>`
+    :`<div class="bub me"><span class="txt">${html}</span><span class="face" aria-hidden="true">🙂</span></div>`);
+    chat.lastElementChild.scrollIntoView({block:'nearest',behavior:'smooth'});};
+  function turn(){
+    if(r>=n) return setTimeout(()=>testEnd('dialog:'+id,'Gespräch mit '+d.who,'home',got,n),1200);
+    const t=d.turns[r], line=fillSlots(t.say,slots), de=fillSlots(t.de,slots);
+    let done=false, tries=0;
+    bubble('them',`${line}<small>${de}</small>`);
+    turnEl.innerHTML=`${dots(n,r)}
+    <div class="tip"><span>Du kannst sagen: <b>«${t.example}»</b> <span class="small">(${t.hint})</span></span>
+      <button class="btn small" id="ex" aria-label="Beispiel anhören">👂</button></div>
+    <div class="ctrl"><button class="btn round" id="again" aria-label="Nochmal hören">🔊</button><button class="btn round" id="slow" aria-label="Langsam hören">🐢</button>
+    ${local?'<button class="btn mic sun" id="dmic" aria-label="Antworten">🎤</button><button class="btn round" id="me" hidden aria-label="Meine Aufnahme anhören">🎧</button>'
+      :'<button class="btn sun said" id="said">Ich hab\'s gesagt</button>'}</div>
+    <div class="check" id="check" hidden><p>Eltern-Check: Hat es gepasst?</p><div class="ctrl"><button class="btn sun" id="yes">Ja ✓</button><button class="btn" id="no">Nochmal</button></div></div>
+    <p class="hint" id="hint">${local?'Tipp aufs Mikrofon und antworte.':'Antworte laut. Dann tipp auf «Ich hab\'s gesagt».'}</p>
+    <p class="fb" aria-live="polite"></p>
+    <button class="btn small skip" id="skip" hidden>Weiter</button>`;
+    const fb=turnEl.querySelector('.fb'), skip=document.getElementById('skip');
+    document.getElementById('again').onclick=()=>speak(line);
+    document.getElementById('slow').onclick=()=>speak(line,true);
+    document.getElementById('ex').onclick=()=>speak(t.example);
+    const next=ok=>{
+      done=true; if(ok) got++;
+      r++; setTimeout(turn,ok?1500:400);
+    };
+    const success=el=>{fb.textContent=pick(PRAISE); addStars(1); starFly(el); pop(el); next(true);};
+    skip.onclick=()=>{if(!done) next(false);};
+    const said=document.getElementById('said');
+    if(said){
+      const check=document.getElementById('check');
+      said.onclick=()=>{if(done)return; said.hidden=true; check.hidden=false;};
+      document.getElementById('yes').onclick=()=>{if(done)return; check.hidden=true; bubble('me','…'); success(said);};
+      document.getElementById('no').onclick=()=>{check.hidden=true; said.hidden=false; fb.textContent='Probier es nochmal. Tipp auf 👂 für ein Beispiel.';};
+    }
+    const dmic=document.getElementById('dmic');
+    if(dmic) attachMic({btn:dmic,me:document.getElementById('me'),hint:document.getElementById('hint'),target:null,pool:null,sentence:true,
+      idle:'Tipp aufs Mikrofon und antworte.',isDone:()=>done,
+      onResult:res=>{
+        if(res.error){
+          if(res.error==='not-allowed') return dialogPlay(id);
+          fb.textContent=micErrorText(res.error); return;
+        }
+        const m=dialogMatch(res.alts[0],t.answers);
+        countSpeak(m.ok);
+        bubble('me',res.alts[0]);
+        if(m.ok){Object.assign(slots,m.slots); success(dmic);}
+        else{
+          tries++;
+          fb.textContent=`Hmm, das passt noch nicht ganz. Du kannst sagen: «${t.example}»`;
+          if(tries>=2){skip.hidden=false; skip.classList.add('sun');}
+        }
+      }});
+    setTimeout(()=>speak(line),400);
+  }
+  turn();
+}
+
 function home(){
   const p=practiceInfo(), n=streakNow(), doneToday=data.streak.last===today();
   const pmeta=doneToday?'Heute schon geübt ✓ Du kannst gern nochmal.'
@@ -205,6 +301,8 @@ function home(){
   <div class="list two">${levelThemes(l.n).map(tileHTML).join('')}${levelTestTile(l)}</div>`).join('')}
   <h3 class="sec">📚 Geschichten <span class="sub">Hören und verstehen</span></h3>
   <div class="list two">${STORIES.map(storyTile).join('')}</div>
+  <h3 class="sec">💬 Gespräche <span class="sub">Selbst reden</span></h3>
+  <div class="list two">${DIALOGS.map(dialogTile).join('')}</div>
   ${speechOK?'':'<p class="note">Dieses Gerät kann leider nichts vorlesen. Öffne die App am besten in Safari oder Chrome.</p>'}
   ${standalone?'':`<p class="note small">Tipp für Eltern: ${/iPhone|iPad|Macintosh/.test(navigator.userAgent)?'In Safari auf «Teilen» und dann «Zum Home-Bildschirm» tippen.':'Im Browser-Menü «App installieren» oder «Zum Startbildschirm hinzufügen» wählen.'} Dann startet die App wie eine richtige App und läuft auch ohne Internet.</p>`}
   <button class="reset" data-go="parents">Für Eltern: Übersicht, Spielstand sichern, Sprechen einstellen</button>
@@ -226,6 +324,8 @@ function overviewHTML(){
     <div class="ov">${LEVELS.map(l=>`<div class="ovl"><p class="ovh">${l.icon} ${l.name} ${medalBadge('level:'+l.n)}${bestOf('level:'+l.n)?` <span class="small">Test ${bestOf('level:'+l.n)} %</span>`:''}</p>
       ${levelThemes(l.n).map(t=>{const k=knownCount(t), n=t.items.length, b=bestOf('theme:'+t.id);
         return `<div class="ovr"><span>${t.icon} ${t.name}</span><span class="bar"><span style="width:${Math.round(k/n*100)}%;background:${t.color}"></span></span><span class="small">${k}/${n}${b?` · ${medalBadge('theme:'+t.id)} ${b} %`:''}</span></div>`;}).join('')}</div>`).join('')}</div>
+    <p class="small">Sprechen: ${data.speak.n?`${data.speak.ok} von ${data.speak.n} Versuchen erkannt (${Math.round(data.speak.ok/data.speak.n*100)} %)`:'noch keine Versuche'}.
+    Gespräche: ${DIALOGS.map(d=>`${d.icon} ${d.title} ${bestOf('dialog:'+d.id)?medalBadge('dialog:'+d.id)+' '+bestOf('dialog:'+d.id)+' %':'–'}`).join(' · ')}</p>
     <p class="small">Geschichten: ${STORIES.map(st=>`${st.icon} ${st.title} ${bestOf('story:'+st.id)?medalBadge('story:'+st.id)+' '+bestOf('story:'+st.id)+' %':'–'}`).join(' · ')}</p>
     <h3>Schwierige Wörter</h3>
     ${hard?`<ul class="hard">${hard}</ul><p class="small">Diese Wörter kommen bei «Heute üben» automatisch öfter dran.</p>`:'<p class="small">Noch keine Fehler gespeichert.</p>'}`;
@@ -577,7 +677,8 @@ function testEnd(key,title,back,got,n){
   <div class="end"><div class="trophy">${res.medal?res.medal.icon:'💪'}</div><h2>${big}</h2>
   <p>${title}: ${got} von ${n} richtig (${res.pct} %).${res.medal?` Das ist ${res.medal.name}!`:' Ab 50 % gibt es eine Medaille.'}${improved}${res.bonus?` Dafür gibt es ${res.bonus===1?'einen Extra-Stern':res.bonus+' Extra-Sterne'}.`:''}</p>
   ${reward?`<p class="newstk">Neuer Spezial-Sticker: <span class="big">${reward}</span> ${LEVEL_STICKERS[key.slice(6)][1]}!</p>`:''}
-  <div class="col">${key.startsWith('story:')?`<button class="btn sun" data-go="storyq:${key.slice(6)}">Fragen nochmal</button>
+  <div class="col">${key.startsWith('dialog:')?`<button class="btn sun" data-go="dialog:${key.slice(7)}">Nochmal reden</button>`
+  :key.startsWith('story:')?`<button class="btn sun" data-go="storyq:${key.slice(6)}">Fragen nochmal</button>
   <button class="btn" data-go="story:${key.slice(6)}:0">Geschichte nochmal lesen</button>`
   :`<button class="btn sun" data-go="${key.startsWith('level:')?'ltest:'+key.slice(6):'ttest:'+key.slice(6)}">Test nochmal machen</button>
   ${res.passed?'':'<button class="btn" data-go="practice">Mit «Heute üben» trainieren</button>'}`}
@@ -677,6 +778,7 @@ async function checkSpoken(m,audio,target,pool,sentence){
   const {asr,Tensor}=m;
   const g=((await asr(audio)).text||'').replace(/\[[^\]]*\]|\([^)]*\)/g,'').trim();
   if(!g) return {error:'no-speech'};
+  if(target==null) return {alts:[g],ok:null}; // freie Antwort (Gespräche): die Prüfung macht der Aufrufer
   if(heardOK(target,[g],sentence)) return {alts:[g],ok:true};
   const {model,tokenizer,processor}=asr, gc=model.generation_config;
   const {input_features}=await processor(audio);
@@ -768,11 +870,22 @@ function attachMic(o){
       busy=false; cur=null; btn.classList.remove('live','think'); btn.style.removeProperty('--lvl');
       if(!res||o.isDone()||!document.body.contains(btn)) return;
       if(res.clip){clip=res; if(me) me.hidden=false; if(o.onClip) o.onClip(res);}
+      if(res.alts&&res.ok!=null) countSpeak(res.ok);
       hint.textContent=clip?'Tipp auf 🎧, um dich selbst zu hören.':o.idle;
       if(res.error==='not-allowed'){micBlocked=true; micReason=SR_HINT;}
       o.onResult(res);
     });
   };
+}
+
+function countSpeak(ok){data.speak.n++; if(ok) data.speak.ok++; save();}
+/* Rückmeldung pro Wort bei Sätzen: grün erkannt, rot noch nicht (bei Erfolg alles grün) */
+function wordFbHTML(target,heard,ok){
+  return wordMatch(target,heard||'').map(x=>`<span class="${ok||x.ok?'wok':'wmiss'}">${x.w}</span>`).join(' ');
+}
+function showWordFb(el,target,heard,ok){
+  if(!el) return;
+  el.hidden=false; el.innerHTML=wordFbHTML(target,heard,ok)+(ok?'':'<span class="wlegend">Rot = noch nicht erkannt</span>');
 }
 
 /* Aufgabe «Sag es auf Englisch»: Bild und Deutsch sehen, das englische Wort selbst sagen (ohne Vorsprechen).
@@ -783,6 +896,7 @@ function sayStep(tid,it,pool,head,onDone){
   <div class="bcard">${vis(it,'md')}<p class="qde">${it.de}</p><p class="de" id="sayq">Sag es auf Englisch!</p></div>
   <div class="ctrl"><button class="btn mic sun" id="smic" aria-label="Jetzt sprechen">🎤</button><button class="btn round" id="me" hidden aria-label="Meine Aufnahme anhören">🎧</button></div>
   <p class="hint" id="hint">Tipp aufs Mikrofon und sag es auf Englisch.</p>
+  <p class="wordfb" id="wfb" hidden></p>
   <p class="fb" aria-live="polite"></p>
   <button class="btn small skip" id="dunno">Weiss ich nicht</button>`;
   const fb=app.querySelector('.fb'), hint=document.getElementById('hint'), btn=document.getElementById('smic');
@@ -803,6 +917,7 @@ function sayStep(tid,it,pool,head,onDone){
         if(res.error==='not-allowed'){done=true; fb.textContent='Das Mikrofon ist nicht freigegeben. Diese Aufgabe zählt nicht.'; setTimeout(()=>onDone(null),2200); return;}
         fb.textContent=micErrorText(res.error); return;
       }
+      if(it.s) showWordFb(document.getElementById('wfb'),it.en,res.alts[0],res.ok);
       if(res.ok) return finish(true);
       if(++tries>=2) return finish(false);
       fb.textContent=`Ich habe «${res.alts[0]}» verstanden. Probier es nochmal!`;
@@ -851,6 +966,7 @@ function speakMode(id){
     <div class="check" id="check" hidden><p>Eltern-Check: Hat es richtig geklungen?</p><div class="ctrl"><button class="btn sun" id="yes">Ja, richtig ✓</button><button class="btn" id="again2">Nochmal üben</button></div></div>
     <p class="hint" id="hint">${mode==='local'?'Hör zu, dann tipp aufs Mikrofon und sprich nach.':'Hör zu und sprich laut nach. Dann tipp auf «Ich hab\'s gesagt».'}</p>
     ${reason?`<p class="hint small">${reason}</p>`:''}
+    <p class="wordfb" id="wfb" hidden></p>
     <p class="fb" aria-live="polite"></p>
     <button class="btn small skip" id="skip">Überspringen</button>`;
     const fb=app.querySelector('.fb'), hint=document.getElementById('hint'), skip=document.getElementById('skip');
@@ -889,6 +1005,7 @@ function speakMode(id){
           if(res.error==='not-allowed') return round('Das Mikrofon ist nicht freigegeben. Sprich einfach laut nach.');
           fb.textContent=micErrorText(res.error); return;
         }
+        if(sent) showWordFb(document.getElementById('wfb'),it.en,res.alts[0],res.ok);
         if(res.ok) success(lmic); else wrong(res.alts[0]);
       }});
     setTimeout(()=>speak(it.en),300);
@@ -958,6 +1075,7 @@ function go(route){
   else if(s==='ltest') levelTest(id);
   else if(s==='story') story(id,+(arg||0));
   else if(s==='storyq') storyQuiz(id);
+  else if(s==='dialog') dialogPlay(id);
 }
 app.addEventListener('click',e=>{const b=e.target.closest('[data-go]'); if(b) go(b.dataset.go);});
 home();

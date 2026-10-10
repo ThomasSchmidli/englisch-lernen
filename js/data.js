@@ -234,3 +234,36 @@ const STORIES=[
     Q('Where is Luna?','Wo ist Luna?',['in the box','on the bed','in the tree'])
   ]}
 ];
+
+/* Gespräche: eine Figur sagt etwas (say, de), das Kind antwortet frei.
+   answers: mögliche Antworten (Kleinschreibung, ohne Satzzeichen) mit Platzhaltern
+   {name} {number} {color} {animal} {food} {weather} {any}; was dort gesagt wird, kann die Figur
+   später verwenden ({name} im Satz der Figur). example: Beispielantwort als Hilfe. */
+const T_=(say,de,answers,example,hint)=>({say,de,answers,example,hint});
+const DIALOGS=[
+  {id:'hello',level:1,title:'Hallo, Leo!',icon:'🦁',who:'Leo',face:'🦁',turns:[
+    T_("Hello! I am Leo. What's your name?",'Hallo! Ich bin Leo. Wie heisst du?',['my name is {name}','i am {name}','{name}'],'My name is Mia.','Ich heisse …'),
+    T_('Nice to meet you, {name}! How are you?','Freut mich, {name}! Wie geht es dir?',['fine','good','great','happy','ok','okay','tired','sad','not bad'],'I am fine, thank you.','Mir geht es gut.'),
+    T_('How old are you?','Wie alt bist du?',['{number}'],'I am eight.','Ich bin … Jahre alt.'),
+    T_('Wow! Goodbye, {name}!','Toll! Tschüss, {name}!',['goodbye','bye','see you'],'Goodbye!','Tschüss!')
+  ]},
+  {id:'favourites',level:2,title:'Was magst du?',icon:'🐼',who:'Pia',face:'🐼',turns:[
+    T_("Hi! I'm Pia. What is your favourite colour?",'Hallo! Ich bin Pia. Was ist deine Lieblingsfarbe?',['{color}'],'My favourite colour is blue.','Meine Lieblingsfarbe ist …'),
+    T_('{color}! Nice! What is your favourite animal?','{color}! Schön! Was ist dein Lieblingstier?',['{animal}'],'I like dogs.','Ich mag …'),
+    T_('Cool! Do you like pizza?','Cool! Magst du Pizza?',['yes','no','i do','i like pizza',"i don't"],'Yes, I do!','Ja! / Nein.'),
+    T_('What food do you like?','Welches Essen magst du?',['{food}'],'I like apples.','Ich mag …'),
+    T_('Yummy! Bye bye!','Lecker! Tschüss!',['goodbye','bye','see you'],'Bye bye!','Tschüss!')
+  ]},
+  {id:'shop',level:3,title:'Im Laden',icon:'🛒',who:'Herr Brown',face:'👨‍🦳',turns:[
+    T_('Hello! Can I help you?','Hallo! Kann ich dir helfen?',['{food}'],'Can I have an apple, please?','Kann ich bitte … haben?'),
+    T_('Here you are. Anything else?','Bitte schön. Sonst noch etwas?',['no','yes','{food}','nothing'],'No, thank you.','Nein, danke.'),
+    T_("That's two francs, please.",'Das macht zwei Franken, bitte.',['here you are','here','thank you','thanks','okay'],'Here you are.','Bitte schön.'),
+    T_('Thank you! Have a nice day!','Danke! Einen schönen Tag!',['thank you','thanks','bye','goodbye','you too'],'Thank you! Goodbye!','Danke! Tschüss!')
+  ]},
+  {id:'weather-talk',level:4,title:'Was machen wir heute?',icon:'🌦️',who:'Sam',face:'🧒',turns:[
+    T_("Good morning! What's the weather like today?",'Guten Morgen! Wie ist das Wetter heute?',['{weather}'],'It is sunny.','Es ist …'),
+    T_('Oh, it is {weather}! What do you want to do today?','Oh, es ist {weather}! Was willst du heute machen?',['i want to {any}',"i'd like to {any}",'play {any}','go {any}','{any}'],'I want to play football.','Ich will …'),
+    T_('That sounds great! Can I come too?','Das klingt super! Darf ich mitkommen?',['yes','sure','of course','okay','no'],'Yes, of course!','Ja, klar!'),
+    T_('Yay! See you later!','Juhu! Bis später!',['see you','bye','goodbye','later'],'See you later!','Bis später!')
+  ]}
+];

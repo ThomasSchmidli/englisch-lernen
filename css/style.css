@@ -222,3 +222,23 @@ h1,h2,h3,p{margin:0}
 .stage.story .word.sent{font-size:clamp(1.5rem,6.5vw,2.1rem)}
 .ctrl .btn[disabled]{opacity:.4}
 #sayq .word{margin-top:0}
+
+/* Wort-Rückmeldung */
+.wordfb{text-align:center;font-size:1.35rem;font-weight:800;line-height:1.5;margin-top:.8rem}
+.wordfb .wok{color:var(--grass)}
+.wordfb .wmiss{color:var(--berry);text-decoration:underline wavy}
+.wordfb .wlegend{display:block;font-size:.85rem;font-weight:600;color:var(--muted)}
+.readaloud{margin-top:.4rem}
+
+/* Gespräche */
+.chat{display:flex;flex-direction:column;gap:.6rem;margin-bottom:.8rem}
+.bub{display:flex;align-items:flex-end;gap:.4rem;max-width:92%}
+.bub .face{font-size:2rem;line-height:1;flex:none}
+.bub .txt{border:3px solid var(--line);border-radius:18px;padding:.5rem .8rem;font-size:1.2rem;font-weight:700;line-height:1.25;background:var(--card)}
+.bub .txt small{display:block;font-size:.85rem;font-weight:500;color:var(--muted);margin-top:.15rem}
+.bub.them .txt{border-bottom-left-radius:4px}
+.bub.me{align-self:flex-end}
+.bub.me .txt{background:var(--sun);color:#1B2559;border-bottom-right-radius:4px}
+.turn .tip{display:flex;align-items:center;justify-content:space-between;gap:.6rem;background:var(--soft);border:2px dashed var(--line);border-radius:14px;padding:.5rem .7rem;font-size:1rem}
+.turn .tip .small{color:var(--muted)}
+.turn .dots{margin:.2rem 0 .6rem}

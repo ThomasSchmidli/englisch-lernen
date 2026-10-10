@@ -4,7 +4,7 @@ const root=path.join(__dirname,'..');
 const ctx={}; vm.createContext(ctx);
 for(const f of ['js/data.js','js/logic.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx,{filename:f});
 const run=code=>vm.runInContext(code,ctx);
-const L=run('({THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
+const L=run('({DIALOGS,wordMatch,dialogMatch,fillSlots,THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
 
 let failed=0, passed=0;
 // Objekte aus dem vm-Kontext haben andere Prototypen: als JSON vergleichen
@@ -78,7 +78,7 @@ test('Spielstand aus Version 1 wird übernommen',()=>{
 test('ungültige Sicherungen werden abgelehnt',()=>{
   for(const bad of [null,'x',{},{stars:'5'},{foo:1}]) assert.strictEqual(L.normalize(bad),null);
 });
-test('neuer Spielstand hat alle Felder',()=>assert.deepStrictEqual(Object.keys(L.fresh()).sort(),['bonus','earned','known','srs','stars','stickers','streak','tests']));
+test('neuer Spielstand hat alle Felder',()=>assert.deepStrictEqual(Object.keys(L.fresh()).sort(),['bonus','earned','known','speak','srs','stars','stickers','streak','tests']));
 
 /* Tests und Medaillen */
 test('Medaillen',()=>{
@@ -122,6 +122,43 @@ test('Sticker sind eindeutig und jedes Level hat einen Spezial-Sticker',()=>{
   const all=[...L.STICKER_PACKS.flatMap(p=>p.items.map(i=>i[0])),...Object.values(L.LEVEL_STICKERS).map(x=>x[0])];
   assert.strictEqual(new Set(all).size,all.length,'doppelter Sticker');
   for(const l of L.LEVELS) assert.ok(L.LEVEL_STICKERS[l.n],`Level ${l.n} ohne Spezial-Sticker`);
+});
+
+/* Rückmeldung pro Wort */
+test('wordMatch markiert fehlende Wörter',()=>{
+  eq(L.wordMatch('I can ride a bike.','I can write a bike').map(x=>x.ok),[true,true,false,true,true]);
+  eq(L.wordMatch("It's three o'clock.","It's 3 o'clock").map(x=>x.ok),[true,true,true]);
+  eq(L.wordMatch('Where is Mum?','where is mom').map(x=>x.ok),[true,true,true]);
+});
+
+/* Gespräche */
+const dm=(h,a)=>JSON.parse(JSON.stringify(L.dialogMatch(h,a)));
+test('Antwortmuster mit freien Teilen',()=>{
+  eq(dm('My name is Lena.',['my name is {name}']),{ok:true,slots:{name:'lena'}});
+  eq(dm("I'm 8 years old.",['{number}']),{ok:true,slots:{number:'eight'}});
+  eq(dm('Can I have an apple, please?',['{food}']),{ok:true,slots:{food:'apple'}});
+  eq(dm('I like dogs.',['{animal}']),{ok:true,slots:{animal:'dogs'}});
+  eq(dm('My favourite colour is grey.',['{color}']),{ok:true,slots:{color:'grey'}});
+  eq(dm("It's raining.",['{weather}']),{ok:true,slots:{weather:'raining'}});
+  eq(dm('I want to play football',['i want to {any}']),{ok:true,slots:{any:'play football'}});
+});
+test('falsche Antworten passen nicht',()=>{
+  assert.ok(!L.dialogMatch('banana',['{color}']).ok);
+  assert.ok(!L.dialogMatch('I like cars',['{animal}']).ok);
+  assert.ok(!L.dialogMatch('',['my name is {name}']).ok);
+  assert.ok(!L.dialogMatch('blue',['{number}']).ok);
+});
+test('Figur verwendet das Gesagte, sonst einen Ersatz',()=>{
+  assert.strictEqual(L.fillSlots('Nice to meet you, {name}!',{name:'anna lena'}),'Nice to meet you, Anna Lena!');
+  assert.strictEqual(L.fillSlots('{color}! Nice!',{color:'blue'}),'Blue! Nice!');
+  assert.strictEqual(L.fillSlots('Oh, it is {weather}!',{}),'Oh, it is nice!');
+  assert.strictEqual(L.fillSlots('Goodbye, {name}!',{}),'Goodbye, friend!');
+});
+test('jede Beispielantwort passt zu ihren Mustern, Platzhalter sind gültig',()=>{
+  for(const d of L.DIALOGS) for(const t of d.turns){
+    assert.ok(L.dialogMatch(t.example,t.answers).ok,`${d.id}: «${t.example}» passt nicht zu ${t.answers.join(' / ')}`);
+    L.fillSlots(t.say,{});
+  }
 });
 
 /* Inhalte passen zu den Levels */
