@@ -2,9 +2,15 @@
 
 Kleine Lern-App für Kinder, die mit Englisch beginnen: Wörter und einfache Sätze
 mit Bildern, Sprachausgabe, Hör-Quiz, Memory, Satz bauen und Sprechübungen.
+«Heute üben» mischt fällige Wiederholungen aus allen Themen (1, 2, 4, 7, 14 Tage)
+mit neuen Wörtern und zählt die Tage hintereinander.
+
+Die App lässt sich auf Tablet und Handy installieren (Safari: «Teilen» → «Zum
+Home-Bildschirm») und läuft danach auch ohne Internet.
 
 Reine statische Webseite ohne Build-Schritt: `index.html`, `css/style.css`,
-`js/data.js` (Inhalte) und `js/app.js` (Logik).
+`js/data.js` (Inhalte), `js/app.js` (Logik), `sw.js` (Offline) und
+`manifest.webmanifest` mit den Icons in `icons/`.
 
 ## Veröffentlichen mit GitHub Pages
 

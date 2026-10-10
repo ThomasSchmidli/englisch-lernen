@@ -4,9 +4,11 @@
 - Schweizer Schreibweise: «ss» statt «ß», Schweizer Wörter (Glace, Velo, Kappe).
 - Keine Frameworks, kein Build-Schritt. Reines HTML/CSS/JavaScript, damit GitHub Pages die Dateien direkt ausliefert.
 - Inhalte (Themen, Wörter, Sätze) gehören in `js/data.js`, Logik in `js/app.js`.
-  - Wort-Thema: `{id, kind:'words', name, icon, color, items:[W(en, de, emoji)]}` (Farben: `c`, Zahlen: `n`)
+  - Wort-Thema: `{id, kind:'words', name, icon, color, items:[W(en, de, emoji)]}` (Farben: `c`, Zahlen: `n`, kurzer Text wie «Mo»: `t`)
   - Satz-Thema: `{id, kind:'sentences', ..., items:[S(en, de, emoji)]}`
   - Bestehende `id`s und `en`-Texte nicht ändern: daran hängt der Spielstand.
 - Spielstand-Schlüssel `englisch-lernen-v1` in localStorage nicht ändern. Bei Änderungen am Datenformat eine Übernahme der alten Daten einbauen.
+  - Inhalt: `stars`, `known` (gelernt pro Thema), `srs` (`'themaId|en'` → `{l: Stufe 0–5, d: fällig am JJJJ-MM-TT}`), `streak` (`{n, last}`), `bonus` (Datum der letzten Extra-Sterne).
+- Offline: `sw.js` lädt eigene Dateien zuerst aus dem Netz. Neue Dateien in `FILES` eintragen und bei Änderungen an `sw.js` die Version in `CACHE` erhöhen.
 - Jedes Thema braucht mindestens 6 Einträge (Memory) und Emojis, die sich im Quiz klar unterscheiden.
 - Nach Änderungen: Syntax prüfen, lokal mit `python3 -m http.server` testen, dann committen und auf `main` pushen.

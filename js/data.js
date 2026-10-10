@@ -44,6 +44,16 @@ const THEMES=[
     W('ball','Ball','⚽'),W('teddy bear','Teddybär','🧸'),W('car','Auto','🚗'),W('bike','Velo','🚲'),
     W('kite','Drachen','🪁'),W('puzzle','Puzzle','🧩'),W('balloon','Ballon','🎈'),W('robot','Roboter','🤖'),W('dice','Würfel','🎲')
   ]},
+  {id:'weather',kind:'words',name:'Wetter',icon:'🌦️',color:'var(--sky)',items:[
+    W('sun','Sonne','☀️'),W('rain','Regen','🌧️'),W('snow','Schnee','❄️'),W('wind','Wind','💨'),
+    W('cloud','Wolke','☁️'),W('rainbow','Regenbogen','🌈'),W('lightning','Blitz','⚡'),W('umbrella','Regenschirm','☂️'),
+    W('snowman','Schneemann','⛄')
+  ]},
+  {id:'days',kind:'words',name:'Wochentage',icon:'📅',color:'var(--grape)',items:[
+    {en:'Monday',de:'Montag',t:'Mo'},{en:'Tuesday',de:'Dienstag',t:'Di'},{en:'Wednesday',de:'Mittwoch',t:'Mi'},
+    {en:'Thursday',de:'Donnerstag',t:'Do'},{en:'Friday',de:'Freitag',t:'Fr'},{en:'Saturday',de:'Samstag',t:'Sa'},
+    {en:'Sunday',de:'Sonntag',t:'So'}
+  ]},
 
   {id:'s-hello',kind:'sentences',name:'Hallo & wie geht\'s?',icon:'👋',color:'var(--sun)',items:[
     S('Hello!','Hallo!','👋'),S('Good morning!','Guten Morgen!','🌅'),S('Good night!','Gute Nacht!','🌙'),
@@ -67,5 +77,23 @@ const THEMES=[
     S('The frog is green.','Der Frosch ist grün.','🐸'),S('The elephant is big.','Der Elefant ist gross.','🐘'),
     S('The mouse is small.','Die Maus ist klein.','🐭'),S('The ice cream is cold.','Die Glace ist kalt.','🍦❄️'),
     S('The sun is hot.','Die Sonne ist heiss.','☀️🔥')
+  ]},
+  {id:'s-can',kind:'sentences',name:'I can …',icon:'💪',color:'var(--tang)',items:[
+    S('I can run.','Ich kann rennen.','🏃'),S('I can swim.','Ich kann schwimmen.','🏊'),
+    S('I can sing.','Ich kann singen.','🎤'),S('I can dance.','Ich kann tanzen.','💃'),
+    S('I can read.','Ich kann lesen.','📖'),S('I can draw.','Ich kann zeichnen.','🎨'),
+    S('I can ride a bike.','Ich kann Velo fahren.','🚴'),S('I can climb.','Ich kann klettern.','🧗')
+  ]},
+  {id:'s-time',kind:'sentences',name:'Wie spät ist es?',icon:'🕒',color:'var(--grass)',items:[
+    S('It\'s one o\'clock.','Es ist ein Uhr.','🕐'),S('It\'s three o\'clock.','Es ist drei Uhr.','🕒'),
+    S('It\'s five o\'clock.','Es ist fünf Uhr.','🕔'),S('It\'s six o\'clock.','Es ist sechs Uhr.','🕕'),
+    S('It\'s eight o\'clock.','Es ist acht Uhr.','🕗'),S('It\'s nine o\'clock.','Es ist neun Uhr.','🕘'),
+    S('It\'s twelve o\'clock.','Es ist zwölf Uhr.','🕛')
+  ]},
+  {id:'s-ask',kind:'sentences',name:'Fragen',icon:'❓',color:'var(--berry)',items:[
+    S('Where is the cat?','Wo ist die Katze?','❓🐱'),S('Where is my ball?','Wo ist mein Ball?','❓⚽'),
+    S('Where is Mum?','Wo ist Mama?','❓👩'),S('What is your name?','Wie heisst du?','📛❓'),
+    S('How old are you?','Wie alt bist du?','🎂❓'),S('Can I have an apple, please?','Kann ich bitte einen Apfel haben?','🙋🍎'),
+    S('Can I have some water, please?','Kann ich bitte Wasser haben?','🙋💧'),S('Can I have an ice cream, please?','Kann ich bitte eine Glace haben?','🙋🍦')
   ]}
 ];

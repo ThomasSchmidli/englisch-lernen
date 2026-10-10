@@ -2,10 +2,44 @@
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 const KEY='englisch-lernen-v1';
-let data={stars:0,known:{}};
-try{const s=localStorage.getItem(KEY); if(s){const d=JSON.parse(s); data={stars:d.stars||0,known:d.known||{}};}}catch(e){}
+/* Datum als «JJJJ-MM-TT» in Ortszeit */
+const pad=n=>String(n).padStart(2,'0');
+const fmt=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today=()=>fmt(new Date());
+function addDays(s,n){const [y,m,d]=s.split('-').map(Number); return fmt(new Date(y,m-1,d+n));}
+
+/* Spielstand: stars, known (gelernt pro Thema), srs (Wiederholung pro Eintrag), streak (Tage hintereinander) */
+const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:''});
+let data=fresh();
+try{
+  const s=localStorage.getItem(KEY);
+  if(s){
+    const d=JSON.parse(s);
+    data={stars:d.stars||0,known:d.known||{},srs:d.srs||{},streak:d.streak||{n:0,last:''},bonus:d.bonus||''};
+    // Übernahme aus v1 ohne Wiederholung: Gelerntes kommt heute zum ersten Mal wieder
+    for(const tid in data.known) for(const en of data.known[tid]){const k=tid+'|'+en; if(!data.srs[k]) data.srs[k]={l:1,d:today()};}
+  }
+}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){}}
-function learn(tid,en){data.known[tid]=data.known[tid]||[]; if(!data.known[tid].includes(en)){data.known[tid].push(en); save();}}
+function learn(tid,en){
+  data.known[tid]=data.known[tid]||[]; if(!data.known[tid].includes(en)) data.known[tid].push(en);
+  const k=tid+'|'+en; if(!data.srs[k]) data.srs[k]={l:1,d:addDays(today(),1)};
+  save();
+}
+/* Wiederholung: Stufe 0–5, richtig = eine Stufe höher und später wieder, falsch = morgen wieder */
+const GAP=[1,1,2,4,7,14];
+function grade(tid,en,ok){
+  const k=tid+'|'+en, s=data.srs[k]||{l:0,d:today()};
+  if(ok){s.l=Math.min(5,s.l+1); s.d=addDays(today(),GAP[s.l]);}
+  else{s.l=0; s.d=addDays(today(),1);}
+  data.srs[k]=s;
+  if(ok) learn(tid,en); else save();
+}
+function markDay(){
+  const t=today(), st=data.streak; if(st.last===t) return;
+  st.n=st.last===addDays(t,-1)?st.n+1:1; st.last=t; save();
+}
+const streakNow=()=>{const st=data.streak; return (st.last===today()||st.last===addDays(today(),-1))?st.n:0;};
 function knownCount(t){const k=data.known[t.id]||[]; return t.items.filter(i=>k.includes(i.en)).length;}
 function addStars(n){data.stars+=n; save(); document.querySelectorAll('.stars').forEach(s=>{s.textContent='⭐ '+data.stars; s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop');});}
 
@@ -29,6 +63,7 @@ function speak(t){
 }
 
 const app=document.getElementById('app');
+const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const T=id=>THEMES.find(t=>t.id===id);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -36,9 +71,11 @@ function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor
 function vis(it,size){
   if(it.e) return `<span class="emo ${size}${it.s?' multi':''}" aria-hidden="true">${it.e}</span>`;
   if(it.c) return `<span class="swatch ${size}" style="background:${it.c}" aria-hidden="true"></span>`;
+  if(it.t) return `<span class="num txt ${size}" aria-hidden="true">${it.t}</span>`;
   return `<span class="num ${size}" aria-hidden="true">${it.n}</span>`;
 }
 const starBadge=()=>`<span class="stars" aria-label="${data.stars} Sterne">⭐ ${data.stars}</span>`;
+const streakBadge=()=>{const n=streakNow(); return n?`<span class="streak" aria-label="${n} Tage hintereinander geübt">🔥 ${n}</span>`:'';};
 const topbar=(back,title)=>`<div class="top">${back?`<button class="btn small" data-go="${back}">‹ Zurück</button>`:'<span></span>'}<h2>${title||''}</h2>${starBadge()}</div>`;
 const dots=(n,r)=>`<div class="dots" aria-label="Aufgabe ${r+1} von ${n}">${Array.from({length:n},(_,k)=>`<span class="${k<r?'done':k===r?'now':''}"></span>`).join('')}</div>`;
 
@@ -63,19 +100,31 @@ function tileHTML(t){
 
 function home(){
   const words=THEMES.filter(t=>t.kind==='words'), sents=THEMES.filter(t=>t.kind==='sentences');
-  app.innerHTML=`<div class="top"><span></span>${starBadge()}</div>
+  const p=practiceInfo(), n=streakNow(), doneToday=data.streak.last===today();
+  const pmeta=doneToday?'Heute schon geübt ✓ Du kannst gern nochmal.'
+    :p.due?`${p.due} ${p.due===1?'Wort wartet':'Wörter und Sätze warten'} auf dich.`
+    :'Lerne neue Wörter aus allen Themen.';
+  const smsg=doneToday?(n>1?`Du übst schon ${n} Tage hintereinander. Super!`:'Heute hast du schon geübt. Bis morgen! 🔥')
+    :n?`Schon ${n} ${n===1?'Tag':'Tage'} hintereinander! Übe heute, damit es weitergeht.`
+    :'Übe jeden Tag ein bisschen und sammle Flammen 🔥';
+  app.innerHTML=`<div class="top">${streakBadge()||'<span></span>'}${starBadge()}</div>
   <h1 class="hello">Hello! <span class="wave">👋</span></h1>
-  <p class="lead">Wähle ein Thema und leg los.</p>
+  <p class="lead">${smsg}</p>
+  <button class="btn tile today" data-go="practice">
+    <span class="icon" style="background:var(--sun)">⭐</span>
+    <span class="tx"><span class="name">Heute üben</span><span class="meta">${pmeta}</span></span>
+  </button>
   <h3 class="sec">Wörter</h3>
   <div class="list two">${words.map(tileHTML).join('')}</div>
   <h3 class="sec">Sätze</h3>
   <div class="list two">${sents.map(tileHTML).join('')}</div>
   ${speechOK?'':'<p class="note">Dieses Gerät kann leider nichts vorlesen. Öffne die App am besten in Safari oder Chrome.</p>'}
+  ${standalone?'':`<p class="note small">Tipp für Eltern: ${/iPhone|iPad|Macintosh/.test(navigator.userAgent)?'In Safari auf «Teilen» und dann «Zum Home-Bildschirm» tippen.':'Im Browser-Menü «App installieren» oder «Zum Startbildschirm hinzufügen» wählen.'} Dann startet die App wie eine richtige App und läuft auch ohne Internet.</p>`}
   <button class="reset" id="reset">Fortschritt zurücksetzen</button>`;
   const rb=document.getElementById('reset'); let armed=false;
   rb.onclick=()=>{
     if(!armed){armed=true; rb.textContent='Wirklich alles löschen? Nochmal tippen.'; return;}
-    data={stars:0,known:{}}; save(); home();
+    data=fresh(); save(); home();
   };
 }
 
@@ -115,41 +164,79 @@ function explore(id,i){
   setTimeout(()=>speak(it.en),150);
 }
 
+/* Eine Hör-Quiz-Aufgabe. onDone(true) wenn beim ersten Versuch richtig. */
+function quizStep(tid,target,pool,head,onDone){
+  let first=true, done=false;
+  const opts=shuffle([target,...shuffle(pool.filter(x=>x!==target)).slice(0,3)]);
+  app.innerHTML=`${head}
+  <div class="ask"><button class="btn speaker sun" id="again" aria-label="Nochmal hören">🔊</button><p>Hör gut zu und tipp auf das richtige Bild.</p></div>
+  <div class="grid">${opts.map((o,k)=>`<button class="btn opt" data-k="${k}" aria-label="Antwort ${k+1}">${vis(o,'md')}</button>`).join('')}</div>
+  <p class="fb" aria-live="polite"></p>`;
+  const fb=app.querySelector('.fb');
+  document.getElementById('again').onclick=()=>speak(target.en);
+  app.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+    if(done) return;
+    const o=opts[+b.dataset.k];
+    if(o===target){
+      done=true; b.classList.add('right'); pop(b);
+      grade(tid,target.en,first);
+      if(first){addStars(1); starFly(b);}
+      fb.textContent=`${pick(PRAISE)} «${target.en}» heisst «${target.de}»`;
+      speak(target.en);
+      setTimeout(()=>onDone(first),target.s?2400:1700);
+    }else{
+      first=false; b.classList.add('wrong'); b.disabled=true;
+      fb.textContent='Fast! Hör nochmal genau hin.';
+      setTimeout(()=>speak(target.en),350);
+    }
+  });
+  setTimeout(()=>speak(target.en),300);
+}
+
+/* Eine Satz-bauen-Aufgabe. onDone(true) wenn ohne Fehler gebaut. */
+function buildStep(tid,it,head,onDone){
+  const words=it.en.split(' '); let pos=0, clean=true, done=false;
+  const tiles=shuffle(words.map(w=>w));
+  app.innerHTML=`${head}
+  <div class="bcard">${vis(it,'md')}<p class="de">${it.de}</p><button class="btn small sun" id="again">🔊 Anhören</button></div>
+  <div class="slots">${words.map(()=>'<span class="slot"></span>').join('')}</div>
+  <div class="tiles">${tiles.map((w,k)=>`<button class="btn wtile" data-k="${k}">${w}</button>`).join('')}</div>
+  <p class="fb" aria-live="polite">Tipp die Wörter in der richtigen Reihenfolge an.</p>`;
+  const fb=app.querySelector('.fb'), slots=[...app.querySelectorAll('.slot')];
+  document.getElementById('again').onclick=()=>speak(it.en);
+  app.querySelectorAll('.wtile').forEach(b=>b.onclick=()=>{
+    if(done) return;
+    const w=tiles[+b.dataset.k];
+    if(w===words[pos]){
+      slots[pos].textContent=w; slots[pos].classList.add('filled'); pop(slots[pos]);
+      b.disabled=true; b.style.visibility='hidden'; pos++;
+      fb.textContent='';
+      if(pos===words.length){
+        done=true;
+        grade(tid,it.en,clean);
+        if(clean){addStars(1); starFly(app.querySelector('.slots'));}
+        fb.textContent=`${pick(PRAISE)} ${it.en}`;
+        speak(it.en);
+        setTimeout(()=>onDone(clean),2600);
+      }
+    }else{
+      clean=false; nope(b);
+      fb.textContent='Nicht ganz. Welches Wort kommt jetzt?';
+    }
+  });
+  setTimeout(()=>speak(it.en),300);
+}
+
 function quiz(id){
   const t=T(id); const rounds=shuffle(t.items).slice(0,Math.min(10,t.items.length));
   let r=0, got=0;
   function round(){
-    if(r>=rounds.length) return finish();
-    const target=rounds[r]; let first=true, done=false;
-    const opts=shuffle([target,...shuffle(t.items.filter(x=>x!==target)).slice(0,3)]);
-    app.innerHTML=`${topbar('theme:'+id,'Hör-Quiz')}
-    ${dots(rounds.length,r)}
-    <div class="ask"><button class="btn speaker sun" id="again" aria-label="Nochmal hören">🔊</button><p>Hör gut zu und tipp auf das richtige Bild.</p></div>
-    <div class="grid">${opts.map((o,k)=>`<button class="btn opt" data-k="${k}" aria-label="Antwort ${k+1}">${vis(o,'md')}</button>`).join('')}</div>
-    <p class="fb" aria-live="polite"></p>`;
-    const fb=app.querySelector('.fb');
-    document.getElementById('again').onclick=()=>speak(target.en);
-    app.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
-      if(done) return;
-      const o=opts[+b.dataset.k];
-      if(o===target){
-        done=true; b.classList.add('right'); pop(b);
-        if(first){got++; learn(id,target.en); addStars(1); starFly(b);}
-        fb.textContent=`${pick(PRAISE)} «${target.en}» heisst «${target.de}»`;
-        speak(target.en);
-        setTimeout(()=>{r++; round();},target.s?2400:1700);
-      }else{
-        first=false; b.classList.add('wrong'); b.disabled=true;
-        fb.textContent='Fast! Hör nochmal genau hin.';
-        setTimeout(()=>speak(target.en),350);
-      }
-    });
-    setTimeout(()=>speak(target.en),300);
-  }
-  function finish(){
-    const n=rounds.length;
-    const big=got===n?'Perfekt!':got>=n/2?'Super gemacht!':'Gut geübt!';
-    endScreen(id,big,`Du hast ${got} von ${n} sofort erkannt und ${got} Sterne gesammelt.`,'quiz:'+id);
+    if(r>=rounds.length){
+      const n=rounds.length;
+      const big=got===n?'Perfekt!':got>=n/2?'Super gemacht!':'Gut geübt!';
+      return endScreen(id,big,`Du hast ${got} von ${n} sofort erkannt und ${got} Sterne gesammelt.`,'quiz:'+id);
+    }
+    quizStep(id,rounds[r],t.items,topbar('theme:'+id,'Hör-Quiz')+dots(rounds.length,r),ok=>{if(ok)got++; r++; round();});
   }
   round();
 }
@@ -162,49 +249,69 @@ function build(id){
       const n=rounds.length;
       return endScreen(id,got===n?'Perfekt!':'Super gebaut!',`Du hast ${got} von ${n} Sätzen ohne Fehler gebaut und ${got} Sterne gesammelt.`,'build:'+id);
     }
-    const it=rounds[r]; const words=it.en.split(' '); let pos=0, clean=true, done=false;
-    const tiles=shuffle(words.map(w=>w));
-    app.innerHTML=`${topbar('theme:'+id,'Satz bauen')}
-    ${dots(rounds.length,r)}
-    <div class="bcard">${vis(it,'md')}<p class="de">${it.de}</p><button class="btn small sun" id="again">🔊 Anhören</button></div>
-    <div class="slots">${words.map(()=>'<span class="slot"></span>').join('')}</div>
-    <div class="tiles">${tiles.map((w,k)=>`<button class="btn wtile" data-k="${k}">${w}</button>`).join('')}</div>
-    <p class="fb" aria-live="polite">Tipp die Wörter in der richtigen Reihenfolge an.</p>`;
-    const fb=app.querySelector('.fb'), slots=[...app.querySelectorAll('.slot')];
-    document.getElementById('again').onclick=()=>speak(it.en);
-    app.querySelectorAll('.wtile').forEach(b=>b.onclick=()=>{
-      if(done) return;
-      const w=tiles[+b.dataset.k];
-      if(w===words[pos]){
-        slots[pos].textContent=w; slots[pos].classList.add('filled'); pop(slots[pos]);
-        b.disabled=true; b.style.visibility='hidden'; pos++;
-        fb.textContent='';
-        if(pos===words.length){
-          done=true;
-          if(clean){got++; learn(id,it.en); addStars(1); starFly(app.querySelector('.slots'));}
-          fb.textContent=`${pick(PRAISE)} ${it.en}`;
-          speak(it.en);
-          setTimeout(()=>{r++; round();},2600);
-        }
-      }else{
-        clean=false; nope(b);
-        fb.textContent='Nicht ganz. Welches Wort kommt jetzt?';
-      }
-    });
-    setTimeout(()=>speak(it.en),300);
+    buildStep(id,rounds[r],topbar('theme:'+id,'Satz bauen')+dots(rounds.length,r),ok=>{if(ok)got++; r++; round();});
   }
   round();
+}
+
+/* Heute üben: fällige Wiederholungen aus allen Themen, aufgefüllt mit neuen Einträgen */
+const PRACTICE_N=10;
+function practiceInfo(){
+  const t0=today(), all=THEMES.flatMap(t=>t.items.map(it=>({t,it,s:data.srs[t.id+'|'+it.en]})));
+  const due=all.filter(x=>x.s&&x.s.d<=t0);
+  return {all,due:due.length,dueList:due};
+}
+function practiceList(){
+  const {all,dueList}=practiceInfo();
+  let list=shuffle(dueList).sort((a,b)=>a.s.l-b.s.l||(a.s.d<b.s.d?-1:a.s.d>b.s.d?1:0)).slice(0,PRACTICE_N);
+  if(list.length<PRACTICE_N){
+    // neue Einträge: zuerst aus angefangenen Themen, dann in der Reihenfolge der Themen
+    const started=new Set(Object.keys(data.srs).map(k=>k.split('|')[0]));
+    const order=t=>(started.has(t.id)?0:1000)+THEMES.indexOf(t);
+    const news=shuffle(all.filter(x=>!x.s)).sort((a,b)=>order(a.t)-order(b.t));
+    list=list.concat(news.slice(0,PRACTICE_N-list.length));
+  }
+  if(list.length<PRACTICE_N){
+    // alles gelernt und nichts fällig: was am frühesten wieder dran wäre
+    const rest=all.filter(x=>x.s&&!list.includes(x)).sort((a,b)=>a.s.l-b.s.l||(a.s.d<b.s.d?-1:1));
+    list=list.concat(rest.slice(0,PRACTICE_N-list.length));
+  }
+  return shuffle(list);
+}
+function practice(){
+  const rounds=practiceList(); let r=0, got=0;
+  function round(){
+    if(r>=rounds.length) return practiceEnd(got,rounds.length);
+    const {t,it}=rounds[r];
+    const head=topbar('home','Heute üben')+dots(rounds.length,r)+`<p class="from">${t.icon} ${t.name}</p>`;
+    const next=ok=>{if(ok)got++; r++; round();};
+    if(it.s&&it.en.includes(' ')&&Math.random()<.5) buildStep(t.id,it,head,next);
+    else quizStep(t.id,it,t.items,head,next);
+  }
+  round();
+}
+function practiceEnd(got,n){
+  const first=data.bonus!==today();
+  if(first){data.bonus=today(); addStars(3);}
+  markDay();
+  const k=streakNow();
+  app.innerHTML=`${topbar('home','')}
+  <div class="end"><div class="trophy">🔥</div><h2>${k} ${k===1?'Tag':'Tage'} am Stück!</h2>
+  <p>Du hast ${got} von ${n} sofort gewusst.${first?' Für das Üben heute gibt es 3 Extra-Sterne!':''}</p>
+  <div class="col"><button class="btn sun" data-go="practice">Nochmal üben</button>
+  <button class="btn" data-go="home">Zur Startseite</button></div></div>`;
 }
 
 /* Sprechübungen */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let micBlocked=false, activeRec=null;
 let micReason=SR?'':'Dieser Browser kann keine Sprache erkennen. Deshalb hört ein Erwachsener zu.';
-const SOUNDS={one:['won'],two:['to','too'],four:['for'],eight:['ate'],eye:['i','aye'],ear:['year','here']};
+const SOUNDS={one:['won'],two:['to','too'],four:['for'],eight:['ate'],eye:['i','aye'],ear:['year','here'],mum:['mom','mam'],sun:['son']};
 function norm(s){
   return s.toLowerCase().replace(/[’`]/g,"'")
+    .replace(/\b(\d{1,2})(:00| ?o'?clock)/g,"$1 o'clock")
     .replace(/\b(\d{1,2})\b/g,(m,d)=>(+d>=1&&+d<=20)?NUM_EN[+d-1]:m)
-    .replace(/\bi'm\b/g,'i am').replace(/\bdo not\b/g,"don't")
+    .replace(/\bi'm\b/g,'i am').replace(/\bit's\b/g,'it is').replace(/\bdo not\b/g,"don't")
     .replace(/[^a-z' ]+/g,' ').replace(/\s+/g,' ').trim();
 }
 function heardOK(target,alts,sentence){
@@ -254,12 +361,12 @@ function speakMode(id){
     if(note) fb.textContent=note;
     const next=()=>{if(activeRec){try{activeRec.abort()}catch(e){}} r++; round();};
     const success=el=>{
-      done=true; got++; learn(id,it.en); addStars(1); starFly(el); pop(el);
+      done=true; got++; grade(id,it.en,true); addStars(1); starFly(el); pop(el);
       fb.textContent=pick(PRAISE)+' Das hast du toll gesagt!';
       setTimeout(next,1900);
     };
     document.getElementById('hear').onclick=()=>speak(it.en);
-    skip.onclick=()=>{if(!done) next();};
+    skip.onclick=()=>{if(done) return; if(tries) grade(id,it.en,false); next();};
     const said=document.getElementById('said');
     const check=document.getElementById('check');
     if(said){
@@ -338,6 +445,7 @@ function memory(id){
 }
 
 function endScreen(id,big,msg,replay){
+  markDay();
   app.innerHTML=`${topbar('theme:'+id,'')}
   <div class="end"><div class="trophy">🏆</div><h2>${big}</h2><p>${msg}</p>
   <div class="col"><button class="btn sun" data-go="${replay}">Nochmal spielen</button>
@@ -351,6 +459,7 @@ function go(route){
   if(activeRec){try{activeRec.abort()}catch(e){}}
   window.scrollTo(0,0);
   if(s==='home') home();
+  else if(s==='practice') practice();
   else if(s==='theme') theme(id);
   else if(s==='explore') explore(id,+(arg||0));
   else if(s==='quiz') quiz(id);
@@ -360,3 +469,8 @@ function go(route){
 }
 app.addEventListener('click',e=>{const b=e.target.closest('[data-go]'); if(b) go(b.dataset.go);});
 home();
+
+/* Offline-Betrieb und Installation (nur über https oder localhost) */
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}

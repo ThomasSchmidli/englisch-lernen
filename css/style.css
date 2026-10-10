@@ -152,3 +152,12 @@ h1,h2,h3,p{margin:0}
   *{animation:none !important;transition:none !important}
   .fly{display:none}
 }
+
+/* Heute üben, Serie, Wochentage */
+.streak{background:var(--tang);color:#1B2559;border:3px solid var(--line);border-radius:999px;padding:.1rem .8rem;font-weight:800;font-size:1.2rem;white-space:nowrap}
+.tile.today{background:var(--sun);color:#1B2559;margin-bottom:.4rem}
+.tile.today .name{font-size:1.6rem}
+.tile.today .meta{color:#1B2559}
+.from{text-align:center;color:var(--muted);font-weight:700;font-size:1rem;margin:-.4rem 0 .8rem}
+.num.txt{letter-spacing:-.02em}
+.note.small{font-size:.92rem;color:var(--muted)}
