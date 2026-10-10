@@ -4,7 +4,7 @@ const root=path.join(__dirname,'..');
 const ctx={}; vm.createContext(ctx);
 for(const f of ['js/data.js','js/logic.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx,{filename:f});
 const run=code=>vm.runInContext(code,ctx);
-const L=run('({DIALOGS,wordMatch,dialogMatch,fillSlots,THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
+const L=run('({practicePick,DIALOGS,wordMatch,dialogMatch,fillSlots,THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
 
 let failed=0, passed=0;
 // Objekte aus dem vm-Kontext haben andere Prototypen: als JSON vergleichen
@@ -159,6 +159,27 @@ test('jede Beispielantwort passt zu ihren Mustern, Platzhalter sind gültig',()=
     assert.ok(L.dialogMatch(t.example,t.answers).ok,`${d.id}: «${t.example}» passt nicht zu ${t.answers.join(' / ')}`);
     L.fillSlots(t.say,{});
   }
+});
+
+/* Heute üben: nur Gelerntes */
+test('Heute üben nimmt nur gelernte Einträge, fällige zuerst',()=>{
+  const d=L.fresh(), day='2026-10-10';
+  d.known={animals:['dog','cat','cow'],colors:['red']};
+  d.srs={'animals|dog':{l:3,d:'2026-10-20'},'animals|cat':{l:0,d:'2026-10-09'},'colors|red':{l:2,d:'2026-10-10'},
+         'animals|pig':{l:0,d:'2026-10-01'}}; // pig falsch beantwortet, aber nie gelernt
+  const p=L.practicePick(L.THEMES,d,day,10);
+  assert.strictEqual(p.learned,4);
+  assert.strictEqual(p.due,3); // cat, red, cow (cow ohne Eintrag gilt als heute fällig)
+  const ens=p.list.map(x=>x.it.en);
+  assert.ok(!ens.includes('pig'),'nie gelerntes Wort dabei');
+  eq(ens.slice(0,3).sort(),['cat','cow','red']);
+  assert.strictEqual(ens[3],'dog');
+  assert.strictEqual(ens[0],'cat'); // tiefste Stufe zuerst
+});
+test('Heute üben ohne Gelerntes ist leer, Anzahl wird begrenzt',()=>{
+  assert.strictEqual(L.practicePick(L.THEMES,L.fresh(),'2026-10-10',10).list.length,0);
+  const d=L.fresh(); d.known={animals:L.THEMES.find(t=>t.id==='animals').items.map(i=>i.en)};
+  assert.strictEqual(L.practicePick(L.THEMES,d,'2026-10-10',10).list.length,10);
 });
 
 /* Inhalte passen zu den Levels */

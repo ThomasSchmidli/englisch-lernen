@@ -242,3 +242,4 @@ h1,h2,h3,p{margin:0}
 .turn .tip{display:flex;align-items:center;justify-content:space-between;gap:.6rem;background:var(--soft);border:2px dashed var(--line);border-radius:14px;padding:.5rem .7rem;font-size:1rem}
 .turn .tip .small{color:var(--muted)}
 .turn .dots{margin:.2rem 0 .6rem}
+.hint.pro{font-weight:700;color:var(--grape);margin:0 0 .6rem}

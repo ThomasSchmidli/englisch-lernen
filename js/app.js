@@ -1,7 +1,7 @@
 /* Anzeige und Ablauf der App: Navigation, Spiele, Tests, Sprachausgabe, Aufnahme, Spielstand.
    Reine Logik (Datum, Wiederholung, Sprachvergleich, Auswertung) liegt in js/logic.js. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='13';
+const VERSION='14';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 /* Spielstand im Browser (Schlüssel nicht ändern, sonst beginnt der Spielstand bei null) */
@@ -207,16 +207,36 @@ function storyQuiz(id){
 /* Gespräche: die Figur sagt etwas, das Kind antwortet frei (Muster mit freien Teilen, js/logic.js dialogMatch).
    Was das Kind sagt (Name, Farbe …), verwendet die Figur später. Zwei Versuche, dann «Weiter». */
 const D_=id=>DIALOGS.find(x=>x.id===id);
+/* Zwei Stufen pro Gespräch: «Mit Hilfe» (Beispiel und Übersetzung immer sichtbar, Ergebnis 'dialog:id')
+   und «Profi» (Hilfe erst nach dem ersten Fehlversuch, Ergebnis 'dialogpro:id') */
 function dialogTile(d){
-  const best=bestOf('dialog:'+d.id);
-  return `<button class="btn tile" data-go="dialog:${d.id}">
+  return `<button class="btn tile" data-go="dialogmenu:${d.id}">
     <span class="icon" style="background:var(--sky)">${d.icon}</span>
-    <span class="tx"><span class="name">${d.title} ${medalBadge('dialog:'+d.id)}</span>
-    <span class="meta">${L(d.level).icon} ${L(d.level).name} · mit ${d.who}${best?` · ${best} %`:''}</span></span>
+    <span class="tx"><span class="name">${d.title} ${medalBadge('dialog:'+d.id)}${medalBadge('dialogpro:'+d.id)}</span>
+    <span class="meta">${L(d.level).icon} ${L(d.level).name} · mit ${d.who}</span></span>
   </button>`;
 }
-function dialogPlay(id){
+function dialogMenu(id){
+  const d=D_(id), b1=bestOf('dialog:'+id), b2=bestOf('dialogpro:'+id);
+  app.innerHTML=`${topbar('home',d.title)}
+  <div class="bcard"><span class="emo md" aria-hidden="true">${d.face}</span><p class="qde">${d.who}</p>
+  <p class="de">${d.who} möchte mit dir reden. Wähle, wie viel Hilfe du willst.</p></div>
+  <div class="list" style="margin-top:1rem">
+    <button class="btn tile" data-go="dialog:${id}">
+      <span class="icon" style="background:var(--grass)">🌟</span>
+      <span class="tx"><span class="name">Mit Hilfe ${medalBadge('dialog:'+id)}</span>
+      <span class="meta">Du siehst immer ein Beispiel und die Übersetzung.${b1?` Bestes Ergebnis: ${b1} %`:''}</span></span>
+    </button>
+    <button class="btn tile" data-go="dialog:${id}:pro">
+      <span class="icon" style="background:var(--grape)">🌟🌟</span>
+      <span class="tx"><span class="name">Profi ${medalBadge('dialogpro:'+id)}</span>
+      <span class="meta">Die Hilfe kommt erst, wenn es beim ersten Mal nicht klappt.${b2?` Bestes Ergebnis: ${b2} %`:''}</span></span>
+    </button>
+  </div>`;
+}
+function dialogPlay(id,pro){
   const d=D_(id), n=d.turns.length, slots={}; let r=0, got=0;
+  const key=(pro?'dialogpro:':'dialog:')+id;
   const local=canSpeak();
   app.innerHTML=`${topbar('home',d.title)}
   <div class="chat" id="chat" aria-live="polite"></div>
@@ -227,12 +247,13 @@ function dialogPlay(id){
     :`<div class="bub me"><span class="txt">${html}</span><span class="face" aria-hidden="true">🙂</span></div>`);
     chat.lastElementChild.scrollIntoView({block:'nearest',behavior:'smooth'});};
   function turn(){
-    if(r>=n) return setTimeout(()=>testEnd('dialog:'+id,'Gespräch mit '+d.who,'home',got,n),1200);
+    if(r>=n) return setTimeout(()=>testEnd(key,(pro?'Profi-Gespräch':'Gespräch')+' mit '+d.who,'dialogmenu:'+id,got,n),1200);
     const t=d.turns[r], line=fillSlots(t.say,slots), de=fillSlots(t.de,slots);
     let done=false, tries=0;
-    bubble('them',`${line}<small>${de}</small>`);
+    bubble('them',`${line}<small class="tr"${pro?' hidden':''}>${de}</small>`);
     turnEl.innerHTML=`${dots(n,r)}
-    <div class="tip"><span>Du kannst sagen: <b>«${t.example}»</b> <span class="small">(${t.hint})</span></span>
+    ${pro?'<p class="hint pro" id="prohint">Profi: Antworte ohne Hilfe! Wenn es nicht klappt, kommt ein Tipp.</p>':''}
+    <div class="tip"${pro?' hidden':''}><span>Du kannst sagen: <b>«${t.example}»</b> <span class="small">(${t.hint})</span></span>
       <button class="btn small" id="ex" aria-label="Beispiel anhören">👂</button></div>
     <div class="ctrl"><button class="btn round" id="again" aria-label="Nochmal hören">🔊</button><button class="btn round" id="slow" aria-label="Langsam hören">🐢</button>
     ${local?'<button class="btn mic sun" id="dmic" aria-label="Antworten">🎤</button><button class="btn round" id="me" hidden aria-label="Meine Aufnahme anhören">🎧</button>'
@@ -242,6 +263,13 @@ function dialogPlay(id){
     <p class="fb" aria-live="polite"></p>
     <button class="btn small skip" id="skip" hidden>Weiter</button>`;
     const fb=turnEl.querySelector('.fb'), skip=document.getElementById('skip');
+    // Profi: Beispiel und Übersetzung erst nach dem ersten Fehlversuch zeigen
+    const reveal=()=>{
+      if(!pro) return;
+      turnEl.querySelector('.tip').hidden=false;
+      const tr=chat.querySelectorAll('.bub.them .tr'); if(tr.length) tr[tr.length-1].hidden=false;
+      const ph=document.getElementById('prohint'); if(ph) ph.hidden=true;
+    };
     document.getElementById('again').onclick=()=>speak(line);
     document.getElementById('slow').onclick=()=>speak(line,true);
     document.getElementById('ex').onclick=()=>speak(t.example);
@@ -256,22 +284,22 @@ function dialogPlay(id){
       const check=document.getElementById('check');
       said.onclick=()=>{if(done)return; said.hidden=true; check.hidden=false;};
       document.getElementById('yes').onclick=()=>{if(done)return; check.hidden=true; bubble('me','…'); success(said);};
-      document.getElementById('no').onclick=()=>{check.hidden=true; said.hidden=false; fb.textContent='Probier es nochmal. Tipp auf 👂 für ein Beispiel.';};
+      document.getElementById('no').onclick=()=>{check.hidden=true; said.hidden=false; reveal(); fb.textContent='Probier es nochmal. Tipp auf 👂 für ein Beispiel.';};
     }
     const dmic=document.getElementById('dmic');
     if(dmic) attachMic({btn:dmic,me:document.getElementById('me'),hint:document.getElementById('hint'),target:null,pool:null,sentence:true,
       idle:'Tipp aufs Mikrofon und antworte.',isDone:()=>done,
       onResult:res=>{
         if(res.error){
-          if(res.error==='not-allowed') return dialogPlay(id);
-          fb.textContent=micErrorText(res.error); return;
+          if(res.error==='not-allowed') return dialogPlay(id,pro);
+          reveal(); fb.textContent=micErrorText(res.error); return;
         }
         const m=dialogMatch(res.alts[0],t.answers);
         countSpeak(m.ok);
         bubble('me',res.alts[0]);
         if(m.ok){Object.assign(slots,m.slots); success(dmic);}
         else{
-          tries++;
+          tries++; reveal();
           fb.textContent=`Hmm, das passt noch nicht ganz. Du kannst sagen: «${t.example}»`;
           if(tries>=2){skip.hidden=false; skip.classList.add('sun');}
         }
@@ -284,8 +312,9 @@ function dialogPlay(id){
 function home(){
   const p=practiceInfo(), n=streakNow(), doneToday=data.streak.last===today();
   const pmeta=doneToday?'Heute schon geübt ✓ Du kannst gern nochmal.'
-    :p.due?`${p.due} ${p.due===1?'Wort wartet':'Wörter und Sätze warten'} auf dich.`
-    :'Lerne neue Wörter aus allen Themen.';
+    :!p.learned?'Lerne zuerst ein paar Wörter in einem Thema, dann kannst du hier wiederholen.'
+    :p.due?`${p.due} ${p.due===1?'gelerntes Wort wartet':'gelernte Wörter und Sätze warten'} auf dich.`
+    :`Wiederhole ${Math.min(p.learned,PRACTICE_N)} Wörter, die du schon kannst.`;
   const smsg=doneToday?(n>1?`Du übst schon ${n} Tage hintereinander. Super!`:'Heute hast du schon geübt. Bis morgen! 🔥')
     :n?`Schon ${n} ${n===1?'Tag':'Tage'} hintereinander! Übe heute, damit es weitergeht.`
     :'Übe jeden Tag ein bisschen und sammle Flammen 🔥';
@@ -325,7 +354,7 @@ function overviewHTML(){
       ${levelThemes(l.n).map(t=>{const k=knownCount(t), n=t.items.length, b=bestOf('theme:'+t.id);
         return `<div class="ovr"><span>${t.icon} ${t.name}</span><span class="bar"><span style="width:${Math.round(k/n*100)}%;background:${t.color}"></span></span><span class="small">${k}/${n}${b?` · ${medalBadge('theme:'+t.id)} ${b} %`:''}</span></div>`;}).join('')}</div>`).join('')}</div>
     <p class="small">Sprechen: ${data.speak.n?`${data.speak.ok} von ${data.speak.n} Versuchen erkannt (${Math.round(data.speak.ok/data.speak.n*100)} %)`:'noch keine Versuche'}.
-    Gespräche: ${DIALOGS.map(d=>`${d.icon} ${d.title} ${bestOf('dialog:'+d.id)?medalBadge('dialog:'+d.id)+' '+bestOf('dialog:'+d.id)+' %':'–'}`).join(' · ')}</p>
+    Gespräche (mit Hilfe / Profi): ${DIALOGS.map(d=>`${d.icon} ${d.title} ${bestOf('dialog:'+d.id)?bestOf('dialog:'+d.id)+' %':'–'} / ${bestOf('dialogpro:'+d.id)?bestOf('dialogpro:'+d.id)+' %':'–'}`).join(' · ')}</p>
     <p class="small">Geschichten: ${STORIES.map(st=>`${st.icon} ${st.title} ${bestOf('story:'+st.id)?medalBadge('story:'+st.id)+' '+bestOf('story:'+st.id)+' %':'–'}`).join(' · ')}</p>
     <h3>Schwierige Wörter</h3>
     ${hard?`<ul class="hard">${hard}</ul><p class="small">Diese Wörter kommen bei «Heute üben» automatisch öfter dran.</p>`:'<p class="small">Noch keine Fehler gespeichert.</p>'}`;
@@ -559,32 +588,20 @@ function build(id){
   round();
 }
 
-/* Heute üben: fällige Wiederholungen aus allen Themen, aufgefüllt mit neuen Einträgen */
+/* Heute üben: nur bereits gelernte Wörter und Sätze (Auswahl in js/logic.js practicePick) */
 const PRACTICE_N=10;
-function practiceInfo(){
-  const t0=today(), all=THEMES.flatMap(t=>t.items.map(it=>({t,it,s:data.srs[t.id+'|'+it.en]})));
-  const due=all.filter(x=>x.s&&x.s.d<=t0);
-  return {all,due:due.length,dueList:due};
-}
-function practiceList(){
-  const {all,dueList}=practiceInfo();
-  let list=shuffle(dueList).sort((a,b)=>a.s.l-b.s.l||(a.s.d<b.s.d?-1:a.s.d>b.s.d?1:0)).slice(0,PRACTICE_N);
-  if(list.length<PRACTICE_N){
-    // neue Einträge: zuerst aus angefangenen Themen, dann in der Reihenfolge der Themen
-    const started=new Set(Object.keys(data.srs).map(k=>k.split('|')[0]));
-    const order=t=>(started.has(t.id)?0:1000)+THEMES.indexOf(t);
-    const news=shuffle(all.filter(x=>!x.s)).sort((a,b)=>order(a.t)-order(b.t));
-    list=list.concat(news.slice(0,PRACTICE_N-list.length));
-  }
-  if(list.length<PRACTICE_N){
-    // alles gelernt und nichts fällig: was am frühesten wieder dran wäre
-    const rest=all.filter(x=>x.s&&!list.includes(x)).sort((a,b)=>a.s.l-b.s.l||(a.s.d<b.s.d?-1:1));
-    list=list.concat(rest.slice(0,PRACTICE_N-list.length));
-  }
-  return shuffle(list);
-}
+const practiceInfo=()=>practicePick(THEMES,data,today(),PRACTICE_N,shuffle);
+function practiceList(){return shuffle(practiceInfo().list);}
 function practice(){
   const rounds=practiceList(); let r=0, got=0, skipped=0;
+  if(!rounds.length){
+    app.innerHTML=`${topbar('home','Heute üben')}
+    <div class="end"><div class="trophy">🌱</div><h2>Noch nichts zum Üben</h2>
+    <p>Hier wiederholst du Wörter, die du schon gelernt hast. Spiel zuerst ein Thema, zum Beispiel das Hör-Quiz bei den Tieren.</p>
+    <div class="col"><button class="btn sun" data-go="theme:${THEMES[0].id}">${THEMES[0].icon} ${THEMES[0].name}</button>
+    <button class="btn" data-go="home">Zur Startseite</button></div></div>`;
+    return;
+  }
   function round(){
     if(r>=rounds.length) return practiceEnd(got,rounds.length-skipped);
     const {t,it,s:st}=rounds[r];
@@ -677,7 +694,9 @@ function testEnd(key,title,back,got,n){
   <div class="end"><div class="trophy">${res.medal?res.medal.icon:'💪'}</div><h2>${big}</h2>
   <p>${title}: ${got} von ${n} richtig (${res.pct} %).${res.medal?` Das ist ${res.medal.name}!`:' Ab 50 % gibt es eine Medaille.'}${improved}${res.bonus?` Dafür gibt es ${res.bonus===1?'einen Extra-Stern':res.bonus+' Extra-Sterne'}.`:''}</p>
   ${reward?`<p class="newstk">Neuer Spezial-Sticker: <span class="big">${reward}</span> ${LEVEL_STICKERS[key.slice(6)][1]}!</p>`:''}
-  <div class="col">${key.startsWith('dialog:')?`<button class="btn sun" data-go="dialog:${key.slice(7)}">Nochmal reden</button>`
+  <div class="col">${key.startsWith('dialogpro:')?`<button class="btn sun" data-go="dialog:${key.slice(10)}:pro">Nochmal als Profi</button>`
+  :key.startsWith('dialog:')?`<button class="btn sun" data-go="dialog:${key.slice(7)}">Nochmal reden</button>
+  ${res.passed?`<button class="btn" data-go="dialog:${key.slice(7)}:pro">Jetzt als Profi 🌟🌟</button>`:''}`
   :key.startsWith('story:')?`<button class="btn sun" data-go="storyq:${key.slice(6)}">Fragen nochmal</button>
   <button class="btn" data-go="story:${key.slice(6)}:0">Geschichte nochmal lesen</button>`
   :`<button class="btn sun" data-go="${key.startsWith('level:')?'ltest:'+key.slice(6):'ttest:'+key.slice(6)}">Test nochmal machen</button>
@@ -1075,7 +1094,8 @@ function go(route){
   else if(s==='ltest') levelTest(id);
   else if(s==='story') story(id,+(arg||0));
   else if(s==='storyq') storyQuiz(id);
-  else if(s==='dialog') dialogPlay(id);
+  else if(s==='dialog') dialogPlay(id,arg==='pro');
+  else if(s==='dialogmenu') dialogMenu(id);
 }
 app.addEventListener('click',e=>{const b=e.target.closest('[data-go]'); if(b) go(b.dataset.go);});
 home();

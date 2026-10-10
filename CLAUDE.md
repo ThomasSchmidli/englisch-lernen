@@ -18,6 +18,7 @@
 - Gespräche: `DIALOGS` in `js/data.js` (`T_(say, de, answers, example, hint)`). Antworten sind Muster mit Platzhaltern
   `{name} {number} {color} {animal} {food} {weather} {any}` (`dialogMatch`/`fillSlots` in js/logic.js); was das Kind sagt,
   kann die Figur später verwenden. Jede `example` muss zu ihren `answers` passen (prüft `scripts/test.js`).
+  Zwei Stufen: «Mit Hilfe» (`tests['dialog:id']`) und «Profi» (`tests['dialogpro:id']`, Beispiel und Übersetzung erst nach dem ersten Fehlversuch).
 - Sticker-Album: `STICKER_PACKS` und `LEVEL_STICKERS` in `js/data.js`; Emojis nicht ändern (daran hängt der Spielstand).
 - Spielstand-Schlüssel `englisch-lernen-v1` in localStorage nicht ändern. Bei Änderungen am Datenformat eine Übernahme der alten Daten in `normalize()` (js/logic.js) einbauen; das nutzt auch «Wiederherstellen».
   - Inhalt: `stars`, `known` (gelernt pro Thema), `srs` (`'themaId|en'` → `{l: Stufe 0–5, d: fällig am JJJJ-MM-TT, w: Anzahl Fehler}`),
@@ -26,6 +27,7 @@
     `speak` (`{n, ok}`: Sprechversuche und davon erkannt).
 - Tests: pro Thema 10, pro Level 12 Aufgaben (hören → Bild, Bild → Wort, Deutsch → Englisch, Satz bauen, selbst sagen), ein Versuch pro Aufgabe (sagen: zwei).
   «Sag es auf Englisch» (`sayStep`) nur, wenn die App zuhören kann (`canSpeak()`); auch in «Heute üben» für Einträge ab Stufe 2.
+- «Heute üben» nimmt nur bereits gelernte Einträge (`known`), fällige zuerst (`practicePick` in js/logic.js).
   Geht das Mikrofon nicht, zählt die Aufgabe nicht (`onDone(null)`).
   Medaillen ab 50/75/90 %, bestanden ab 75 % (`testResult` in js/logic.js).
 - Sprechen: die App hört zu mit Erkennung auf dem Gerät (Whisper über Transformers.js, `ASR_LIB`/`ASR_MODEL` in `js/app.js`), sonst Eltern-Check.

@@ -44,7 +44,7 @@ test('Startseite: Levels, Themen, Album, Version',async({page})=>{
   await start(page);
   const n=await page.evaluate(()=>({levels:LEVELS.length,themes:THEMES.length}));
   await expect(page.locator('h3.sec')).toHaveCount(n.levels+2); // plus Geschichten und Gespräche
-  await expect(page.locator('[data-go^="dialog:"]')).toHaveCount(await page.evaluate(()=>DIALOGS.length));
+  await expect(page.locator('[data-go^="dialogmenu:"]')).toHaveCount(await page.evaluate(()=>DIALOGS.length));
   await expect(page.locator('[data-go^="story:"]')).toHaveCount(await page.evaluate(()=>STORIES.length));
   await expect(page.locator('[data-go^="theme:"]')).toHaveCount(n.themes);
   await expect(page.locator('[data-go^="ltest:"]')).toHaveCount(n.levels);
@@ -166,6 +166,7 @@ const fakeHearing=page=>page.evaluate(()=>{
 test('Gespräch: freie Antworten, Figur verwendet den Namen, unpassende Antwort, Ergebnis',async({page})=>{
   await start(page);
   await fakeHearing(page);
+  await page.locator('[data-go="dialogmenu:hello"]').click();
   await page.locator('[data-go="dialog:hello"]').click();
   await expect(page.locator('.bub.them').first()).toContainText("What's your name?");
   const say=async t=>{await page.evaluate(x=>window.__heard.push(x),t); await expect(page.locator('#dmic')).toBeEnabled(); await page.locator('#dmic').click();};
@@ -243,9 +244,36 @@ test('Geschichte lesen und Fragen beantworten',async({page})=>{
   expect(t.best).toBe(100);
 });
 
-test('Heute üben läuft durch und zählt die Serie',async({page})=>{
+test('Heute üben: ohne Gelerntes ein Hinweis',async({page})=>{
   await start(page);
+  await expect(page.locator('[data-go="practice"]')).toContainText('Lerne zuerst');
   await page.locator('[data-go="practice"]').click();
+  await expect(page.locator('.end h2')).toContainText('Noch nichts zum Üben');
+});
+
+test('Gespräch als Profi: Hilfe erst nach dem ersten Fehlversuch',async({page})=>{
+  await start(page);
+  await fakeHearing(page);
+  await page.locator('[data-go="dialogmenu:favourites"]').click();
+  await page.locator('[data-go="dialog:favourites:pro"]').click();
+  await expect(page.locator('.turn .tip')).toBeHidden();
+  await expect(page.locator('.bub.them .tr').first()).toBeHidden();
+  await page.evaluate(()=>window.__heard.push('banana','My favourite colour is green.'));
+  await expect(page.locator('#dmic')).toBeEnabled();
+  await page.locator('#dmic').click();
+  await expect(page.locator('.turn .tip')).toBeVisible();
+  await expect(page.locator('.bub.them .tr').first()).toBeVisible();
+  await page.locator('#dmic').click();
+  await wait(page);
+  await expect(page.locator('.bub.them').nth(1)).toContainText('Green! Nice!');
+  await expect(page.locator('.turn .tip')).toBeHidden(); // neue Frage: wieder ohne Hilfe
+});
+
+test('Heute üben läuft durch und zählt die Serie',async({page})=>{
+  await start(page,{stars:0,known:{animals:['dog','cat','cow','pig','fish','bird'],colors:['red','blue']}});
+  await expect(page.locator('[data-go="practice"]')).toContainText('8 gelernte');
+  await page.locator('[data-go="practice"]').click();
+  await expect(page.locator('.dots span')).toHaveCount(8);
   await playUntilEnd(page);
   await expect(page.locator('.end h2')).toContainText('Tag');
   const d=await page.evaluate(()=>JSON.parse(localStorage.getItem('englisch-lernen-v1')));

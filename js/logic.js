@@ -144,3 +144,15 @@ function fillSlots(text,slots){
   }).replace(/\s+([,!?.])/g,'$1').replace(/\s{2,}/g,' ').trim();
   return t.charAt(0).toUpperCase()+t.slice(1);
 }
+
+/* Heute üben: nur bereits gelernte Einträge (known). Zuerst die fälligen (tiefe Stufe zuerst),
+   aufgefüllt mit anderen gelernten, die am ehesten wieder dran wären. mix: Mischfunktion (für Tests ersetzbar). */
+function practicePick(themes,d,day,n,mix=x=>x){
+  const learned=themes.flatMap(t=>(d.known[t.id]||[])
+    .map(en=>t.items.find(i=>i.en===en)).filter(Boolean)
+    .map(it=>({t,it,s:d.srs[t.id+'|'+it.en]||{l:1,d:day}})));
+  const byNeed=(a,b)=>a.s.l-b.s.l||(a.s.d<b.s.d?-1:a.s.d>b.s.d?1:0);
+  const due=mix(learned.filter(x=>x.s.d<=day)).sort(byNeed);
+  const rest=mix(learned.filter(x=>x.s.d>day)).sort(byNeed);
+  return {learned:learned.length,due:due.length,list:due.concat(rest).slice(0,n)};
+}
