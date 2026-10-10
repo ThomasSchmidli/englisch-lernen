@@ -20,6 +20,7 @@
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:inherit}
+[hidden]{display:none !important}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
@@ -176,3 +177,7 @@ h1,h2,h3,p{margin:0}
 .log{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;font-size:.78rem;line-height:1.4;background:var(--soft);border:2px solid var(--line);border-radius:12px;padding:.6rem;max-height:14rem;overflow:auto;margin:.4rem 0 0}
 .panel .opts label{display:flex;flex-direction:column;font-weight:700;font-size:.95rem;gap:.2rem}
 .panel select{font:inherit;font-size:1rem;color:var(--ink);background:var(--soft);border:2px solid var(--line);border-radius:10px;padding:.3rem .5rem}
+.dict{display:flex;gap:.6rem;margin-top:1.1rem}
+.dict input,.ktest{flex:1;min-width:0;width:100%;font:inherit;font-size:1.3rem;font-weight:700;color:var(--ink);background:var(--card);border:3px solid var(--line);border-radius:16px;padding:.5rem .8rem}
+.dict input:focus,.ktest:focus{outline:4px solid var(--sun);outline-offset:2px}
+.kb{display:block;margin:1rem auto 0}
