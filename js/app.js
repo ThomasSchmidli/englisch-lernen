@@ -1,6 +1,6 @@
 /* Logik der App: Navigation, Spiele, Sprachausgabe, Spracherkennung, Spielstand. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='7';
+const VERSION='8';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 const KEY='englisch-lernen-v1';
@@ -186,7 +186,7 @@ function parents(msg){
     <h3>Sprechen und Mikrofon</h3>
     <p class="small">So spricht das Kind in der Übung «Sprechen». Die Einstellung gilt sofort für die ganze App.</p>
     <div class="row opts">
-      <label>Sprechen über <select id="minput"><option value="mic">App-Mikrofon</option><option value="keyboard">Tastatur-Diktierfunktion</option><option value="parent">Eltern-Check</option></select></label>
+      <label>Sprechen über <select id="minput"><option value="keyboard">Tastatur-Diktierfunktion</option><option value="mic">App-Mikrofon${APPLE?' (auf iPad unzuverlässig)':''}</option><option value="parent">Eltern-Check</option></select></label>
     </div>
     <div id="micbox">
       <div class="row opts">
@@ -425,10 +425,12 @@ const APPLE=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform===
    lang 'auto': englische Sprachen des Geräts, dann en-GB, en-US, Gerätesprache.
    ok = zuletzt erfolgreiche Sprache, bad = Sprachen, die sofort abgebrochen haben */
 const MICKEY='englisch-lernen-mic';
-let micOpts={v:2,input:'mic',cont:false,lang:'auto',ok:null,bad:[]};
+/* Auf iPhone/iPad liefert das App-Mikrofon oft nur Stille, die Tastatur-Diktierfunktion klappt zuverlässig */
+let micOpts={v:3,input:APPLE?'keyboard':SR?'mic':'parent',cont:false,lang:'auto',ok:null,bad:[]};
 try{
   const m=JSON.parse(localStorage.getItem(MICKEY)||'null');
-  if(m&&m.v===2) micOpts={...micOpts,...m};
+  if(m&&m.v===3) micOpts={...micOpts,...m};
+  else if(m&&m.v===2) micOpts={...micOpts,...m,v:3,input:APPLE&&m.input==='mic'?'keyboard':m.input};
   else if(m) micOpts.ok=m.ok??null; // ältere Einstellungen: nur die erfolgreiche Sprache übernehmen
 }catch(e){}
 function saveMic(){try{localStorage.setItem(MICKEY,JSON.stringify(micOpts))}catch(e){}}
@@ -483,7 +485,7 @@ function listen(onDone,onHear){
     let endRes; micRunning=true;
     micIdle=new Promise(res=>endRes=()=>{if(!micRunning) return; micRunning=false; micLastEnd=Date.now(); res();});
     began=Date.now();
-    const live=ev=>{log(ev); if(r===rec&&!alive){alive=true; clearTimeout(watchdog);}};
+    const live=ev=>{log(ev); if(ev==='start') began=Date.now(); if(r===rec&&!alive){alive=true; clearTimeout(watchdog);}};
     ['start','audiostart','speechstart','speechend','audioend'].forEach(ev=>r.addEventListener(ev,()=>live(ev)));
     r.onresult=e=>{
       if(r!==rec||finished) return; live('ergebnis');
@@ -661,7 +663,7 @@ function speakMode(id){
             :res.error==='stuck'?'Das Mikrofon hat nicht reagiert. Tipp nochmal aufs Mikrofon.'
             :res.error==='no-speech'?'Ich habe nichts gehört. Sprich etwas lauter.'
             :`Das hat nicht geklappt (${res.error}). Probier es nochmal.`;
-          if(micFails>=2){tokb.hidden=false; tokb.classList.add('sun');}
+          if(micFails>=1){tokb.hidden=false; tokb.classList.add('sun');}
           return;
         }
         micFails=0;
