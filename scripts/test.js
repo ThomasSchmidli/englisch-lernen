@@ -4,7 +4,7 @@ const root=path.join(__dirname,'..');
 const ctx={}; vm.createContext(ctx);
 for(const f of ['js/data.js','js/logic.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx,{filename:f});
 const run=code=>vm.runInContext(code,ctx);
-const L=run('({packOpen,practicePick,DIALOGS,wordMatch,dialogMatch,fillSlots,THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
+const L=run('({addLog,errorStats,lastMistake,LOG_MAX,KINDS,packOpen,practicePick,DIALOGS,wordMatch,dialogMatch,fillSlots,THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
 
 let failed=0, passed=0;
 // Objekte aus dem vm-Kontext haben andere Prototypen: als JSON vergleichen
@@ -78,7 +78,7 @@ test('Spielstand aus Version 1 wird übernommen',()=>{
 test('ungültige Sicherungen werden abgelehnt',()=>{
   for(const bad of [null,'x',{},{stars:'5'},{foo:1}]) assert.strictEqual(L.normalize(bad),null);
 });
-test('neuer Spielstand hat alle Felder',()=>assert.deepStrictEqual(Object.keys(L.fresh()).sort(),['bonus','earned','known','speak','srs','stars','stickers','streak','tests']));
+test('neuer Spielstand hat alle Felder',()=>assert.deepStrictEqual(Object.keys(L.fresh()).sort(),['bonus','earned','known','log','speak','srs','stars','stickers','streak','tests']));
 
 /* Tests und Medaillen */
 test('Medaillen',()=>{
@@ -196,6 +196,30 @@ test('Heute üben ohne Gelerntes ist leer, Anzahl wird begrenzt',()=>{
   assert.strictEqual(L.practicePick(L.THEMES,L.fresh(),'2026-10-10',10).list.length,0);
   const d=L.fresh(); d.known={animals:L.THEMES.find(t=>t.id==='animals').items.map(i=>i.en)};
   assert.strictEqual(L.practicePick(L.THEMES,d,'2026-10-10',10).list.length,10);
+});
+
+/* Fehler-Auswertung */
+test('Protokoll wird auf die letzten Einträge begrenzt',()=>{
+  const log=[]; for(let i=0;i<L.LOG_MAX+20;i++) L.addLog(log,{i});
+  assert.strictEqual(log.length,L.LOG_MAX); assert.strictEqual(log[0].i,20);
+});
+test('Fehler nach Übungsart, Thema, Verwechslung und Tag',()=>{
+  const day='2026-10-10', y='2026-10-09';
+  const log=[
+    {d:y,t:'animals',e:'cow',k:'hear',ok:0,a:'pig'},{d:day,t:'animals',e:'cow',k:'hear',ok:0,a:'Pig'},
+    {d:day,t:'animals',e:'cow',k:'hear',ok:1},{d:day,t:'animals',e:'dog',k:'say',ok:0,a:'Doc'},
+    {d:day,t:'colors',e:'red',k:'read',ok:1},{d:'2026-01-01',t:'colors',e:'blue',k:'read',ok:0,a:'green'}];
+  const s=L.errorStats(log,day,7);
+  assert.strictEqual(s.total,6); assert.strictEqual(s.wrong,4);
+  eq(s.kinds.hear,{n:3,wrong:2}); eq(s.themes.colors,{n:2,wrong:1});
+  assert.strictEqual(s.confusions[0].e,'cow'); assert.strictEqual(s.confusions[0].n,2); // pig/Pig zusammengezählt
+  assert.strictEqual(s.days.length,7); assert.strictEqual(s.days[6].d,day);
+  eq(s.days[6],{d:day,n:4,wrong:2}); eq(s.days[5],{d:y,n:1,wrong:1});
+  assert.strictEqual(L.lastMistake(log,'animals','cow').a,'Pig');
+  assert.strictEqual(L.lastMistake(log,'colors','red'),null);
+});
+test('jede Übungsart hat eine Bezeichnung',()=>{
+  for(const k of ['hear','read','translate','build','say','speak','story','dialog']) assert.ok(L.KINDS[k],k);
 });
 
 /* Inhalte passen zu den Levels */

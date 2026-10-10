@@ -27,7 +27,10 @@
   - Inhalt: `stars`, `known` (gelernt pro Thema), `srs` (`'themaId|en'` → `{l: Stufe 0–5, d: fällig am JJJJ-MM-TT, w: Anzahl Fehler}`),
     `streak` (`{n, last}`), `bonus` (Datum der letzten Extra-Sterne), `tests` (`'theme:id'`/`'level:n'` → `{best, last, date}`),
     `stickers` (freigeschaltete Emojis), `earned` (alle je verdienten Sterne; `stars` ist der Rest nach Sticker-Käufen),
-    `speak` (`{n, ok}`: Sprechversuche und davon erkannt).
+    `speak` (`{n, ok}`: Sprechversuche und davon erkannt),
+    `log` (letzte 500 Antworten `{d, t, e, k, ok, a}` für die Fehler-Auswertung: Übungsart k, gewählte/gehörte Antwort a).
+- Jede Bewertung mit Übungsart und Antwort aufrufen: `grade(tid, en, ok, kind, antwort)`; Geschichten/Gespräche über `logAnswer`.
+  Auswertung in `errorStats`/`lastMistake` (js/logic.js), Anzeige in `overviewHTML()`; «Gezielt üben» ist `practice:hard`.
 - Tests: pro Thema 10, pro Level 12 Aufgaben (hören → Bild, Bild → Wort, Deutsch → Englisch, Satz bauen, selbst sagen), ein Versuch pro Aufgabe (sagen: zwei).
   «Sag es auf Englisch» (`sayStep`) nur, wenn die App zuhören kann (`canSpeak()`); auch in «Heute üben» für Einträge ab Stufe 2.
 - «Heute üben» nimmt nur bereits gelernte Einträge (`known`), fällige zuerst (`practicePick` in js/logic.js).

@@ -1,7 +1,7 @@
 /* Anzeige und Ablauf der App: Navigation, Spiele, Tests, Sprachausgabe, Aufnahme, Spielstand.
    Reine Logik (Datum, Wiederholung, Sprachvergleich, Auswertung) liegt in js/logic.js. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='15';
+const VERSION='16';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 /* Spielstand im Browser (Schlüssel nicht ändern, sonst beginnt der Spielstand bei null) */
@@ -14,9 +14,16 @@ function learn(tid,en){
   const k=tid+'|'+en; if(!data.srs[k]) data.srs[k]={l:1,d:addDays(today(),1),w:0};
   save();
 }
-function grade(tid,en,ok){
+/* Antwort für die Fehler-Auswertung der Eltern festhalten (k: Übungsart, a: gewählte/gehörte Antwort) */
+function logAnswer(t,e,k,ok,a){
+  const x={d:today(),t,e,k,ok:ok?1:0};
+  if(!ok&&a) x.a=String(a).slice(0,60);
+  addLog(data.log,x);
+}
+function grade(tid,en,ok,kind,answer){
   const k=tid+'|'+en;
   data.srs[k]=review(data.srs[k],ok,today());
+  if(kind) logAnswer(tid,en,kind,ok,answer);
   if(ok) learn(tid,en); else save();
 }
 function markDay(){data.streak=nextStreak(data.streak,today()); save();}
@@ -200,6 +207,7 @@ function storyQuiz(id){
       btns.forEach(x=>{x.disabled=true; if(opts[+x.dataset.k].ok) x.classList.add('right');});
       if(ok){got++; pop(b); addStars(1); starFly(b); fb.textContent=pick(PRAISE);}
       else{b.classList.add('wrong'); fb.textContent=`Richtig wäre: «${right}»`;}
+      logAnswer('story:'+id,q.q,'story',ok,opts[+b.dataset.k].o); save();
       speak(right);
       setTimeout(()=>{r++; round();},ok?1500:2600);
     });
@@ -299,6 +307,7 @@ function dialogPlay(id,pro){
           reveal(); fb.textContent=micErrorText(res.error); return;
         }
         const m=dialogMatch(res.alts[0],t.answers);
+        logAnswer((pro?'dialogpro:':'dialog:')+id,t.say,'dialog',m.ok,res.alts[0]);
         countSpeak(m.ok);
         bubble('me',res.alts[0]);
         if(m.ok){Object.assign(slots,m.slots); success(dmic);}
@@ -344,24 +353,89 @@ function home(){
 }
 
 /* Für Eltern: Fortschritt pro Level und Thema, schwierige Wörter */
+/* Name eines Themas, einer Geschichte oder eines Gesprächs aus dem Schlüssel im Protokoll */
+function placeName(t){
+  if(t.startsWith('story:')){const x=S_(t.slice(6)); return x?`📚 ${x.title}`:t;}
+  if(t.startsWith('dialogpro:')){const x=D_(t.slice(10)); return x?`💬 ${x.title} (Profi)`:t;}
+  if(t.startsWith('dialog:')){const x=D_(t.slice(7)); return x?`💬 ${x.title}`:t;}
+  const x=T(t); return x?`${x.icon} ${x.name}`:t;
+}
+const pctClass=p=>p>=35?'bad':p>=15?'mid':'good';
+const rateBar=(x,label)=>{const p=rate(x); return `<div class="erow"><span class="el">${label}</span>
+  <span class="ebar"><span class="${pctClass(p)}" style="width:${Math.max(p,2)}%"></span></span>
+  <span class="ev"><b>${p} %</b> <span class="small">${x.wrong} von ${x.n}</span></span></div>`;};
+
+/* Für Eltern: wo passieren Fehler? (Übungsart, Thema, Verwechslungen, Wörter, Verlauf) und Fortschritt */
 function overviewHTML(){
-  const t0=today(), all=Object.entries(data.srs);
-  const due=all.filter(([,s])=>s.d<=t0).length, strong=all.filter(([,s])=>s.l>=4).length;
-  const hard=all.filter(([,s])=>s.w>0).sort((a,b)=>b[1].w-a[1].w||a[1].l-b[1].l).slice(0,10).map(([k,s])=>{
-    const [tid,en]=k.split('|'), t=T(tid), it=t&&t.items.find(i=>i.en===en);
-    return it?`<li><b>${en}</b> – ${it.de} <span class="small">(${s.w}× falsch, Stufe ${s.l} von 5)</span></li>`:'';
+  const t0=today(), all=Object.entries(data.srs), st=errorStats(data.log,t0,14);
+  const due=practiceInfo().due, strong=all.filter(([,s])=>s.l>=4).length;
+  const learned=Object.values(data.known).reduce((n,a)=>n+a.length,0);
+  const few=st.total<20;
+  // Übungsarten, schlechteste zuerst
+  const kinds=Object.entries(st.kinds).filter(([k])=>KINDS[k]).sort((a,b)=>rate(b[1])-rate(a[1]));
+  // Themen mit genügend Antworten, schlechteste zuerst
+  const places=Object.entries(st.themes).filter(([,x])=>x.n>=3).sort((a,b)=>rate(b[1])-rate(a[1])||b[1].wrong-a[1].wrong).slice(0,6);
+  // Verwechslungen: bei Auswahl die gewählte Antwort, beim Sprechen das Gehörte
+  const conf=st.confusions.slice(0,8).map(c=>{
+    const how=c.k==='say'||c.k==='speak'||c.k==='dialog'?`gesagt/gehört: «${c.a}»`:c.k==='build'?`getippt: ${c.a}`:`gewählt: «${c.a}»`;
+    return `<li><b>${c.e}</b> → ${how} <span class="small">${c.n>1?c.n+'× · ':''}${KINDS[c.k]||c.k} · ${placeName(c.t)}</span></li>`;
   }).join('');
-  return `<h3>Übersicht</h3>
-    <p class="small">${all.length} Wörter und Sätze angefangen, ${strong} sitzen schon gut (Stufe 4–5), ${due} sind heute zum Wiederholen dran.
-    Insgesamt ${data.earned} Sterne verdient, ${data.stickers.length} Sticker gesammelt.</p>
+  // Schwierige Wörter mit letztem Fehler
+  const hard=hardItems(12).map(({t,it,s})=>{
+    const m=lastMistake(data.log,t.id,it.en);
+    return `<tr><td><button class="btn tiny" data-say="${it.en.replace(/"/g,'&quot;')}" aria-label="${it.en} anhören">🔊</button> <b>${it.en}</b><br><span class="small">${it.de}</span></td>
+      <td class="small">${t.icon} ${t.name}</td><td><b>${s.w}×</b><br><span class="small">Stufe ${s.l}/5</span></td>
+      <td class="small">${m?`${KINDS[m.k]||m.k}${m.a?`: ${m.k==='build'?m.a:`«${m.a}»`}`:''}`:'–'}</td></tr>`;
+  }).join('');
+  // Verlauf 14 Tage
+  const maxN=Math.max(1,...st.days.map(d=>d.n));
+  const days=st.days.map(d=>{
+    const wd=['So','Mo','Di','Mi','Do','Fr','Sa'][new Date(d.d+'T12:00').getDay()];
+    return `<div class="day" title="${d.d}: ${d.n} Antworten, ${d.wrong} falsch"><span class="dcol">
+      <span class="dok" style="height:${Math.round((d.n-d.wrong)/maxN*100)}%"></span><span class="dwr" style="height:${Math.round(d.wrong/maxN*100)}%"></span></span>
+      <span class="dl">${wd}</span></div>`;}).join('');
+
+  return `<h3>Auf einen Blick</h3>
+    <div class="kpis">
+      <div class="kpi"><b>${learned}</b><span>gelernt</span></div>
+      <div class="kpi"><b>${strong}</b><span>sitzen gut</span></div>
+      <div class="kpi"><b>${due}</b><span>heute fällig</span></div>
+      <div class="kpi"><b>${st.total?100-Math.round(st.wrong/st.total*100):'–'}${st.total?' %':''}</b><span>richtig (letzte ${st.total})</span></div>
+    </div>
+
+    <h3>Wo passieren Fehler?</h3>
+    ${few?`<p class="small">Noch wenig Daten (${st.total} Antworten). Die Auswertung wird mit jedem Üben genauer.</p>`:''}
+    ${kinds.length?`<p class="sub2">Nach Übungsart</p>${kinds.map(([k,x])=>rateBar(x,KINDS[k])).join('')}`:''}
+    ${places.length?`<p class="sub2">Themen mit den meisten Fehlern</p>${places.map(([t,x])=>rateBar(x,placeName(t))).join('')}`:''}
+    ${conf?`<p class="sub2">Häufige Verwechslungen</p><ul class="hard">${conf}</ul>`:''}
+    <p class="small">Fehlerquote: grün unter 15 %, orange bis 35 %, rot darüber. Gezählt wird der erste Versuch.
+    Hören = Wort hören und Bild wählen, Lesen = Bild sehen und Wort wählen, Übersetzen = Deutsch sehen und Englisch wählen.</p>
+
+    <h3>Schwierige Wörter</h3>
+    ${hard?`<div class="tblwrap"><table class="hardtbl"><thead><tr><th>Wort</th><th>Thema</th><th>Fehler</th><th>Zuletzt falsch bei</th></tr></thead><tbody>${hard}</tbody></table></div>
+      <div class="row"><button class="btn sun" data-go="practice:hard">Diese Wörter jetzt gezielt üben</button></div>
+      <p class="small">Sie kommen auch bei «Heute üben» automatisch öfter dran, sobald sie gelernt sind.</p>`
+      :'<p class="small">Noch keine Fehler gespeichert.</p>'}
+
+    <h3>Verlauf (14 Tage)</h3>
+    ${st.total?`<div class="days">${days}</div><p class="small"><span class="lg-ok">■</span> richtig <span class="lg-wr">■</span> falsch</p>`:'<p class="small">Noch keine Antworten gespeichert.</p>'}
+
+    <details class="more"><summary>Fortschritt pro Level und Thema</summary>
     <div class="ov">${LEVELS.map(l=>`<div class="ovl"><p class="ovh">${l.icon} ${l.name} ${medalBadge('level:'+l.n)}${bestOf('level:'+l.n)?` <span class="small">Test ${bestOf('level:'+l.n)} %</span>`:''}</p>
-      ${levelThemes(l.n).map(t=>{const k=knownCount(t), n=t.items.length, b=bestOf('theme:'+t.id);
-        return `<div class="ovr"><span>${t.icon} ${t.name}</span><span class="bar"><span style="width:${Math.round(k/n*100)}%;background:${t.color}"></span></span><span class="small">${k}/${n}${b?` · ${medalBadge('theme:'+t.id)} ${b} %`:''}</span></div>`;}).join('')}</div>`).join('')}</div>
+      ${levelThemes(l.n).map(t=>{const k=knownCount(t), n=t.items.length, b=bestOf('theme:'+t.id), e=st.themes[t.id];
+        return `<div class="ovr"><span>${t.icon} ${t.name}</span><span class="bar"><span style="width:${Math.round(k/n*100)}%;background:${t.color}"></span></span><span class="small">${k}/${n}${b?` · ${medalBadge('theme:'+t.id)} ${b} %`:''}${e&&e.n>=3?` · <span class="${pctClass(rate(e))}t">${rate(e)} % falsch</span>`:''}</span></div>`;}).join('')}</div>`).join('')}</div>
     <p class="small">Sprechen: ${data.speak.n?`${data.speak.ok} von ${data.speak.n} Versuchen erkannt (${Math.round(data.speak.ok/data.speak.n*100)} %)`:'noch keine Versuche'}.
     Gespräche (mit Hilfe / Profi): ${DIALOGS.map(d=>`${d.icon} ${d.title} ${bestOf('dialog:'+d.id)?bestOf('dialog:'+d.id)+' %':'–'} / ${bestOf('dialogpro:'+d.id)?bestOf('dialogpro:'+d.id)+' %':'–'}`).join(' · ')}</p>
-    <p class="small">Geschichten: ${STORIES.map(st=>`${st.icon} ${st.title} ${bestOf('story:'+st.id)?medalBadge('story:'+st.id)+' '+bestOf('story:'+st.id)+' %':'–'}`).join(' · ')}</p>
-    <h3>Schwierige Wörter</h3>
-    ${hard?`<ul class="hard">${hard}</ul><p class="small">Diese Wörter kommen bei «Heute üben» automatisch öfter dran.</p>`:'<p class="small">Noch keine Fehler gespeichert.</p>'}`;
+    <p class="small">Geschichten: ${STORIES.map(x=>`${x.icon} ${x.title} ${bestOf('story:'+x.id)?medalBadge('story:'+x.id)+' '+bestOf('story:'+x.id)+' %':'–'}`).join(' · ')}</p>
+    <p class="small">Insgesamt ${data.earned} Sterne verdient, ${data.stickers.length} Sticker gesammelt.</p>
+    </details>`;
+}
+/* Schwierigste Einträge: viele Fehler, tiefe Stufe */
+function hardItems(n){
+  return Object.entries(data.srs).filter(([,s])=>s.w>0)
+    .sort((a,b)=>b[1].w-a[1].w||a[1].l-b[1].l)
+    .map(([k,s])=>{const [tid,en]=k.split('|'), t=T(tid), it=t&&t.items.find(i=>i.en===en); return it?{t,it,s}:null;})
+    .filter(Boolean).slice(0,n);
 }
 
 /* Für Eltern: Sprechen einstellen und testen */
@@ -404,6 +478,7 @@ function parents(msg){
   <div class="panel">
     ${msg?`<p class="okmsg" role="status">${msg}</p>`:''}
     ${overviewHTML()}
+    <details class="more"><summary>Spielstand sichern und wiederherstellen</summary>
     <h3>Sichern</h3>
     <p class="small">Der Spielstand (${data.stars} Sterne, ${learned} gelernte Wörter und Sätze) ist nur auf diesem Gerät gespeichert. Sichere ihn ab und zu, zum Beispiel vor einem Gerätewechsel.</p>
     <div class="row"><button class="btn sun" id="dl">Als Datei speichern</button><button class="btn" id="cp">Code kopieren</button></div>
@@ -414,6 +489,8 @@ function parents(msg){
     <textarea id="paste" rows="3" placeholder="Sicherungs-Code hier einfügen" aria-label="Sicherungs-Code einfügen"></textarea>
     <div class="row"><button class="btn" id="restore">Code übernehmen</button></div>
     <p class="err" id="err" role="alert"></p>
+    </details>
+    <details class="more"${msg?' open':''}><summary>Sprechen einstellen und testen</summary>
     <h3>Sprechen</h3>
     <p class="small">So prüft die App die Übung «Sprechen». Die Einstellung gilt sofort.</p>
     <div class="row opts">
@@ -425,11 +502,14 @@ function parents(msg){
       <div class="row"><button class="btn sun" id="lt">Test starten</button><button class="btn" id="ls" disabled>Stoppen</button></div>
       <pre class="log" id="llog">Auf «Test starten» tippen und «dog» sagen. Mehrmals wiederholen.</pre>
     </div>
-    <h3>Zurücksetzen</h3>
+    </details>
+    <details class="more"><summary>Fortschritt löschen</summary>
     <div class="row"><button class="btn" id="reset">Fortschritt löschen</button></div>
+    </details>
     <p class="ver">Version ${VERSION}</p>
   </div>`;
   micTest();
+  app.querySelectorAll('[data-say]').forEach(b=>b.onclick=()=>speak(b.dataset.say));
   const err=document.getElementById('err');
   const take=d=>{
     const x=normalize(d);
@@ -504,7 +584,7 @@ function explore(id,i){
 
 /* Eine Hör-Quiz-Aufgabe. onDone(true) wenn beim ersten Versuch richtig. */
 function quizStep(tid,target,pool,head,onDone){
-  let first=true, done=false;
+  let first=true, done=false, firstWrong='';
   const opts=shuffle([target,...shuffle(pool.filter(x=>x!==target)).slice(0,3)]);
   app.innerHTML=`${head}
   <div class="ask"><button class="btn speaker sun" id="again" aria-label="Nochmal hören">🔊</button><p>Hör gut zu und tipp auf das richtige Bild.</p></div>
@@ -517,12 +597,13 @@ function quizStep(tid,target,pool,head,onDone){
     const o=opts[+b.dataset.k];
     if(o===target){
       done=true; b.classList.add('right'); pop(b);
-      grade(tid,target.en,first);
+      grade(tid,target.en,first,'hear',firstWrong);
       if(first){addStars(1); starFly(b);}
       fb.textContent=`${pick(PRAISE)} «${target.en}» heisst «${target.de}»`;
       speak(target.en);
       setTimeout(()=>onDone(first),target.s?2400:1700);
     }else{
+      if(first) firstWrong=o.en;
       first=false; b.classList.add('wrong'); b.disabled=true;
       fb.textContent='Fast! Hör nochmal genau hin.';
       setTimeout(()=>speak(target.en),350);
@@ -533,7 +614,7 @@ function quizStep(tid,target,pool,head,onDone){
 
 /* Eine Satz-bauen-Aufgabe. onDone(true) wenn ohne Fehler gebaut. */
 function buildStep(tid,it,head,onDone){
-  const words=it.en.split(' '); let pos=0, clean=true, done=false;
+  const words=it.en.split(' '); let pos=0, clean=true, done=false, wrongTile='';
   const tiles=shuffle(words.map(w=>w));
   app.innerHTML=`${head}
   <div class="bcard">${vis(it,'md')}<p class="de">${it.de}</p><button class="btn small sun" id="again">🔊 Anhören</button></div>
@@ -551,13 +632,14 @@ function buildStep(tid,it,head,onDone){
       fb.textContent='';
       if(pos===words.length){
         done=true;
-        grade(tid,it.en,clean);
+        grade(tid,it.en,clean,'build',wrongTile);
         if(clean){addStars(1); starFly(app.querySelector('.slots'));}
         fb.textContent=`${pick(PRAISE)} ${it.en}`;
         speak(it.en);
         setTimeout(()=>onDone(clean),2600);
       }
     }else{
+      if(clean) wrongTile=`«${w}» statt «${words[pos]}»`;
       clean=false; nope(b);
       fb.textContent='Nicht ganz. Welches Wort kommt jetzt?';
     }
@@ -596,8 +678,9 @@ function build(id){
 const PRACTICE_N=10;
 const practiceInfo=()=>practicePick(THEMES,data,today(),PRACTICE_N,shuffle);
 function practiceList(){return shuffle(practiceInfo().list);}
-function practice(){
-  const rounds=practiceList(); let r=0, got=0, skipped=0;
+function practice(mode){
+  const hardMode=mode==='hard';
+  const rounds=hardMode?shuffle(hardItems(PRACTICE_N).map(x=>({...x}))):practiceList(); let r=0, got=0, skipped=0;
   if(!rounds.length){
     app.innerHTML=`${topbar('home','Heute üben')}
     <div class="end"><div class="trophy">🌱</div><h2>Noch nichts zum Üben</h2>
@@ -607,15 +690,23 @@ function practice(){
     return;
   }
   function round(){
-    if(r>=rounds.length) return practiceEnd(got,rounds.length-skipped);
+    if(r>=rounds.length) return hardMode?hardEnd(got,rounds.length-skipped):practiceEnd(got,rounds.length-skipped);
     const {t,it,s:st}=rounds[r];
-    const head=topbar('home','Heute üben')+dots(rounds.length,r)+`<p class="from">${t.icon} ${t.name}</p>`;
+    const head=topbar(hardMode?'parents':'home',hardMode?'Schwierige Wörter':'Heute üben')+dots(rounds.length,r)+`<p class="from">${t.icon} ${t.name}</p>`;
     const next=ok=>{if(ok===null) skipped++; else if(ok) got++; r++; round();};
     if(canSpeak()&&st&&st.l>=2&&sayable(it)&&Math.random()<.35) sayStep(t.id,it,t.items,head,next);
     else if(it.s&&it.en.includes(' ')&&Math.random()<.5) buildStep(t.id,it,head,next);
     else quizStep(t.id,it,t.items,head,next);
   }
   round();
+}
+function hardEnd(got,n){
+  markDay();
+  app.innerHTML=`${topbar('parents','')}
+  <div class="end"><div class="trophy">💪</div><h2>${got===n?'Alle geschafft!':'Gut geübt!'}</h2>
+  <p>Du hast ${got} von ${n} schwierigen Wörtern sofort gewusst.</p>
+  <div class="col"><button class="btn sun" data-go="practice:hard">Nochmal gezielt üben</button>
+  <button class="btn" data-go="parents">Zurück zur Übersicht</button></div></div>`;
 }
 function practiceEnd(got,n){
   const first=data.bonus!==today();
@@ -653,7 +744,7 @@ function choiceStep(tid,it,pool,kind,head,onDone){
     btns.forEach(x=>{x.disabled=true; if(opts[+x.dataset.k]===it) x.classList.add('right');});
     if(ok){pop(b); addStars(1); starFly(b); fb.textContent=`${pick(PRAISE)} «${it.en}» heisst «${it.de}»`;}
     else{b.classList.add('wrong'); fb.textContent=`Richtig wäre: «${it.en}» – ${it.de}`;}
-    grade(tid,it.en,ok);
+    grade(tid,it.en,ok,kind,opts[+b.dataset.k].en);
     speak(it.en);
     setTimeout(()=>onDone(ok),ok?1500:2600);
   });
@@ -914,7 +1005,7 @@ function showWordFb(el,target,heard,ok){
 /* Aufgabe «Sag es auf Englisch»: Bild und Deutsch sehen, das englische Wort selbst sagen (ohne Vorsprechen).
    Zwei Versuche; «Weiss ich nicht» zählt als falsch. onDone(null), wenn das Mikrofon nicht geht (zählt nicht). */
 function sayStep(tid,it,pool,head,onDone){
-  let done=false, tries=0;
+  let done=false, tries=0, heard='';
   app.innerHTML=`${head}
   <div class="bcard">${vis(it,'md')}<p class="qde">${it.de}</p><p class="de" id="sayq">Sag es auf Englisch!</p></div>
   <div class="ctrl"><button class="btn mic sun" id="smic" aria-label="Jetzt sprechen">🎤</button><button class="btn round" id="me" hidden aria-label="Meine Aufnahme anhören">🎧</button></div>
@@ -925,7 +1016,7 @@ function sayStep(tid,it,pool,head,onDone){
   const fb=app.querySelector('.fb'), hint=document.getElementById('hint'), btn=document.getElementById('smic');
   const finish=ok=>{
     if(done) return; done=true; btn.disabled=true; document.getElementById('dunno').hidden=true;
-    grade(tid,it.en,ok);
+    grade(tid,it.en,ok,'say',heard||'(weiss nicht)');
     document.getElementById('sayq').innerHTML=`<span class="word${it.s?' sent':''}">${it.en}</span>`;
     if(ok){addStars(1); starFly(btn); pop(btn); fb.textContent=`${pick(PRAISE)} Das hast du toll gesagt!`;}
     else fb.textContent=`Es heisst «${it.en}». Hör gut zu!`;
@@ -940,6 +1031,7 @@ function sayStep(tid,it,pool,head,onDone){
         if(res.error==='not-allowed'){done=true; fb.textContent='Das Mikrofon ist nicht freigegeben. Diese Aufgabe zählt nicht.'; setTimeout(()=>onDone(null),2200); return;}
         fb.textContent=micErrorText(res.error); return;
       }
+      heard=res.alts[0];
       if(it.s) showWordFb(document.getElementById('wfb'),it.en,res.alts[0],res.ok);
       if(res.ok) return finish(true);
       if(++tries>=2) return finish(false);
@@ -996,19 +1088,20 @@ function speakMode(id){
     if(note) fb.textContent=note;
     const next=()=>{stopRecording(); r++; round();};
     const success=el=>{
-      done=true; got++; grade(id,it.en,true); addStars(1); starFly(el); pop(el);
+      done=true; got++; grade(id,it.en,true,'speak'); addStars(1); starFly(el); pop(el);
       fb.textContent=pick(PRAISE)+' Das hast du toll gesagt!';
       setTimeout(next,clip?2600:1900);
     };
+    let lastHeard='';
     const wrong=heard=>{
-      tries++;
+      tries++; lastHeard=heard||'';
       fb.textContent=`Ich habe «${heard||'…'}» verstanden. Hör nochmal zu und probier es wieder!`;
       if(tries>=2){skip.textContent='Weiter'; skip.classList.add('sun');}
       setTimeout(()=>speak(it.en),500);
     };
     document.getElementById('hear').onclick=()=>speak(it.en);
     document.getElementById('slow').onclick=()=>speak(it.en,true);
-    skip.onclick=()=>{if(done) return; if(tries) grade(id,it.en,false); next();};
+    skip.onclick=()=>{if(done) return; if(tries) grade(id,it.en,false,'speak',lastHeard); next();};
 
     // Eltern-Check
     const said=document.getElementById('said'), check=document.getElementById('check');
@@ -1085,7 +1178,7 @@ function go(route){
   if(speechOK) speechSynthesis.cancel();
   window.scrollTo(0,0);
   if(s==='home') home();
-  else if(s==='practice') practice();
+  else if(s==='practice') practice(id);
   else if(s==='parents') parents();
   else if(s==='album') album();
   else if(s==='theme') theme(id);

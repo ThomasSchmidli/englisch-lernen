@@ -244,3 +244,30 @@ h1,h2,h3,p{margin:0}
 .turn .dots{margin:.2rem 0 .6rem}
 .hint.pro{font-weight:700;color:var(--grape);margin:0 0 .6rem}
 .stk.closed{opacity:.6}
+
+/* Eltern: Fehler-Auswertung */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+.kpi{background:var(--soft);border:2px solid var(--line);border-radius:14px;padding:.4rem .3rem;text-align:center;display:flex;flex-direction:column}
+.kpi b{font-size:1.35rem;line-height:1.1}
+.kpi span{font-size:.72rem;color:var(--muted);line-height:1.15}
+.sub2{font-weight:800;margin:.8rem 0 .3rem}
+.erow{display:grid;grid-template-columns:minmax(0,9.5rem) minmax(0,1fr) 6.2rem;align-items:center;gap:.5rem;font-size:.92rem;padding:.12rem 0}
+.erow .el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ebar{height:12px;border:2px solid var(--line);border-radius:999px;background:var(--card);overflow:hidden}
+.ebar span{display:block;height:100%}
+.good{background:var(--grass)} .mid{background:var(--tang)} .bad{background:var(--berry)}
+.goodt{color:var(--grass);font-weight:700} .midt{color:var(--tang);font-weight:700} .badt{color:var(--berry);font-weight:700}
+.ev{white-space:nowrap;text-align:right}
+.tblwrap{overflow-x:auto}
+.hardtbl{width:100%;border-collapse:collapse;font-size:.92rem}
+.hardtbl th{text-align:left;font-size:.8rem;color:var(--muted);border-bottom:2px solid var(--line);padding:.2rem .3rem}
+.hardtbl td{border-bottom:1px solid var(--soft);padding:.35rem .3rem;vertical-align:top}
+.btn.tiny{font-size:.85rem;padding:.05rem .35rem;border-radius:10px;border-width:2px;box-shadow:0 2px 0 var(--line)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:3px;align-items:end;height:110px;margin-top:.4rem}
+.day{display:flex;flex-direction:column;align-items:center;height:100%}
+.dcol{flex:1;width:100%;display:flex;flex-direction:column;justify-content:flex-end;border-radius:4px;overflow:hidden;background:var(--soft)}
+.dok{background:var(--grass)} .dwr{background:var(--berry)}
+.dl{font-size:.65rem;color:var(--muted)}
+.lg-ok{color:var(--grass)} .lg-wr{color:var(--berry)}
+details.more{margin-top:1.1rem;border-top:2px dashed var(--soft);padding-top:.6rem}
+details.more summary{font-weight:800;cursor:pointer;font-size:1.1rem}

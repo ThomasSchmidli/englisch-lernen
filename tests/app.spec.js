@@ -333,19 +333,54 @@ test('Sprechen: Mikrofon verweigert → Eltern-Check mit Hinweis',async({page})=
   await expect(page.locator('.fb')).toContainText('toll gesagt');
 });
 
-test('Für Eltern: Übersicht, Sichern und Wiederherstellen',async({page})=>{
+test('Für Eltern: Sichern, Löschen und Wiederherstellen',async({page})=>{
   await start(page,{stars:3,known:{animals:['dog']},srs:{'animals|dog':{l:0,d:'2026-01-01',w:2}}});
   await page.locator('[data-go="parents"]').click();
-  await expect(page.locator('.hard')).toContainText('dog');
+  await expect(page.locator('.hardtbl')).toContainText('dog');
+  await page.locator('summary',{hasText:'sichern'}).click();
   const code=await page.locator('#code').inputValue();
+  await page.locator('summary',{hasText:'löschen'}).click();
   await page.locator('#reset').click(); await page.locator('#reset').click();
   await expect(page.locator('.okmsg')).toContainText('gelöscht');
+  await page.locator('summary',{hasText:'sichern'}).click();
   await page.locator('#paste').fill(code);
   await page.locator('#restore').click();
   await expect(page.locator('.okmsg')).toContainText('wiederhergestellt');
+  await page.locator('summary',{hasText:'sichern'}).click();
   await page.locator('#paste').fill('kaputt');
   await page.locator('#restore').click();
   await expect(page.locator('#err')).toContainText('nicht vollständig');
+});
+
+test('Für Eltern: Fehler nach Übungsart, Thema und Verwechslung, dann gezielt üben',async({page})=>{
+  await start(page);
+  // Thema-Test: immer die falsche Antwort wählen (bei Sprech-Aufgaben «Weiss ich nicht»)
+  await page.evaluate(()=>{window.__said=''; window.speak=t=>{window.__said=t;};});
+  await page.evaluate(()=>go('ttest:animals'));
+  for(let i=0;i<10&&!(await page.locator('.end').count());i++){
+    await wait(page,500);
+    await page.evaluate(()=>{
+      const all=T('animals').items, opts=[...document.querySelectorAll('.opt')];
+      if(document.getElementById('dunno')){document.getElementById('dunno').click(); return;}
+      const q=document.querySelector('.qde')?.textContent, card=document.querySelector('.bcard > .emo');
+      const it=q?all.find(x=>x.de===q):card?all.find(x=>vis(x,'md')===card.outerHTML):all.find(x=>x.en===window.__said);
+      (q||card?opts.find(o=>o.getAttribute('aria-label')!==it.en):opts.find(o=>o.innerHTML!==vis(it,'md'))).click();
+    });
+    await wait(page);
+  }
+  await expect(page.locator('.end')).toContainText('0 von 10');
+  await page.evaluate(()=>go('parents'));
+  await expect(page.locator('.kpi').nth(3)).toContainText('0 %');
+  await expect(page.locator('.erow').first()).toContainText('100 %');
+  await expect(page.locator('.erow',{hasText:'Tiere'})).toContainText('10 von 10');
+  await expect(page.locator('.hard li').first()).toContainText('gewählt');
+  await expect(page.locator('.hardtbl tbody tr')).toHaveCount(10);
+  await expect(page.locator('.days .dwr').last()).toHaveAttribute('style',/height: ?100%/);
+  // gezielt üben
+  await page.locator('[data-go="practice:hard"]').click();
+  await expect(page.locator('.top h2')).toContainText('Schwierige Wörter');
+  await playUntilEnd(page);
+  await expect(page.locator('.end')).toContainText('schwierigen Wörtern');
 });
 
 test('Handy-Breite: kein seitliches Scrollen',async({page})=>{

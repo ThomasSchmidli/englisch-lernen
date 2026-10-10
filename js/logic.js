@@ -10,14 +10,15 @@ function addDays(s,n){const [y,m,d]=s.split('-').map(Number); return fmt(new Dat
 /* Spielstand: stars, known (gelernt pro Thema), srs (Wiederholung pro Eintrag), streak (Tage hintereinander),
    bonus (Datum der letzten Extra-Sterne), tests (bestes Ergebnis pro Test, z. B. 'theme:animals' oder 'level:1'),
    stickers (freigeschaltete Sticker-Emojis), earned (alle je verdienten Sterne; stars ist das, was noch übrig ist),
-   speak (Sprechversuche n und davon erkannt ok, für die Übersicht der Eltern) */
-const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:'',tests:{},stickers:[],earned:0,speak:{n:0,ok:0}});
+   speak (Sprechversuche n und davon erkannt ok, für die Übersicht der Eltern),
+   log (letzte Antworten für die Fehler-Auswertung der Eltern, siehe addLog) */
+const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:'',tests:{},stickers:[],earned:0,speak:{n:0,ok:0},log:[]});
 /* Gespeicherte Daten (auch ältere Formate und Sicherungen) in die aktuelle Form bringen */
 function normalize(d,day=today()){
   if(!d||typeof d!=='object'||typeof d.stars!=='number'||typeof (d.known||{})!=='object') return null;
   const x={stars:d.stars||0,known:d.known||{},srs:d.srs||{},streak:d.streak||{n:0,last:''},bonus:d.bonus||'',tests:d.tests||{},
     stickers:Array.isArray(d.stickers)?d.stickers:[],earned:typeof d.earned==='number'?d.earned:d.stars||0,
-    speak:d.speak&&typeof d.speak.n==='number'?d.speak:{n:0,ok:0}};
+    speak:d.speak&&typeof d.speak.n==='number'?d.speak:{n:0,ok:0},log:Array.isArray(d.log)?d.log:[]};
   // Übernahme aus v1 ohne Wiederholung: Gelerntes kommt heute zum ersten Mal wieder
   for(const tid in x.known) for(const en of x.known[tid]){const k=tid+'|'+en; if(!x.srs[k]) x.srs[k]={l:1,d:day};}
   return x;
@@ -159,4 +160,36 @@ function practicePick(themes,d,day,n,mix=x=>x){
   const due=mix(learned.filter(x=>x.s.d<=day)).sort(byNeed);
   const rest=mix(learned.filter(x=>x.s.d>day)).sort(byNeed);
   return {learned:learned.length,due:due.length,list:due.concat(rest).slice(0,n)};
+}
+
+/* Fehler-Auswertung für Eltern. Ein Eintrag pro Antwort: {d: Tag, t: Thema/Geschichte/Gespräch, e: Ziel,
+   k: Übungsart, ok: 1/0, a: gewählte/gehörte Antwort bei Fehlern}. Nur die letzten LOG_MAX Einträge bleiben. */
+const LOG_MAX=500;
+const KINDS={hear:'Hören',read:'Lesen',translate:'Übersetzen',build:'Satz bauen',
+  say:'Selbst sagen',speak:'Nachsprechen',story:'Geschichten',dialog:'Gespräche'};
+function addLog(log,e){
+  log.push(e);
+  if(log.length>LOG_MAX) log.splice(0,log.length-LOG_MAX);
+  return log;
+}
+const rate=x=>x.n?Math.round(x.wrong/x.n*100):0;
+function errorStats(log,day,days=14){
+  const kinds={}, themes={}, conf={}, byDay={};
+  const add=(o,key,ok)=>{const x=o[key]=o[key]||{n:0,wrong:0}; x.n++; if(!ok) x.wrong++;};
+  for(const x of log){
+    add(kinds,x.k,x.ok); add(themes,x.t,x.ok); add(byDay,x.d,x.ok);
+    if(!x.ok&&x.a){
+      const key=[x.t,x.e,x.a.toLowerCase(),x.k].join('|');
+      (conf[key]=conf[key]||{t:x.t,e:x.e,a:x.a,k:x.k,n:0}).n++;
+    }
+  }
+  const list=[];
+  for(let i=days-1;i>=0;i--){const d=addDays(day,-i); list.push({d,...(byDay[d]||{n:0,wrong:0})});}
+  return {total:log.length,wrong:log.filter(x=>!x.ok).length,kinds,themes,
+    confusions:Object.values(conf).sort((a,b)=>b.n-a.n),days:list};
+}
+/* Letzter Fehler zu einem Eintrag (für die Liste der schwierigen Wörter) */
+function lastMistake(log,t,e){
+  for(let i=log.length-1;i>=0;i--){const x=log[i]; if(!x.ok&&x.t===t&&x.e===e) return x;}
+  return null;
 }
