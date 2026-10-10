@@ -172,3 +172,5 @@ h1,h2,h3,p{margin:0}
 .panel textarea{width:100%;font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:2px solid var(--line);border-radius:12px;padding:.5rem;word-break:break-all;resize:vertical}
 .okmsg{margin-top:.8rem;font-weight:800;color:var(--grass)}
 .err{color:var(--berry);font-weight:700;min-height:1.2em}
+.ver{text-align:center;color:var(--muted);font-size:.85rem;margin-top:.6rem}
+.log{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;font-size:.78rem;line-height:1.4;background:var(--soft);border:2px solid var(--line);border-radius:12px;padding:.6rem;max-height:14rem;overflow:auto;margin:.4rem 0 0}

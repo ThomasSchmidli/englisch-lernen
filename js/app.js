@@ -1,4 +1,6 @@
 /* Logik der App: Navigation, Spiele, Sprachausgabe, Spracherkennung, Spielstand. */
+/* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
+const VERSION='4';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 const KEY='englisch-lernen-v1';
@@ -120,7 +122,31 @@ function home(){
   <div class="list two">${sents.map(tileHTML).join('')}</div>
   ${speechOK?'':'<p class="note">Dieses Gerät kann leider nichts vorlesen. Öffne die App am besten in Safari oder Chrome.</p>'}
   ${standalone?'':`<p class="note small">Tipp für Eltern: ${/iPhone|iPad|Macintosh/.test(navigator.userAgent)?'In Safari auf «Teilen» und dann «Zum Home-Bildschirm» tippen.':'Im Browser-Menü «App installieren» oder «Zum Startbildschirm hinzufügen» wählen.'} Dann startet die App wie eine richtige App und läuft auch ohne Internet.</p>`}
-  <button class="reset" data-go="parents">Für Eltern: Spielstand sichern</button>`;
+  <button class="reset" data-go="parents">Für Eltern: Spielstand sichern, Mikrofon testen</button>
+  <p class="ver">Version ${VERSION}</p>`;
+}
+
+/* Für Eltern: Rohdaten der Spracherkennung anzeigen, um Probleme auf einem Gerät zu finden */
+function micTest(){
+  const mt=document.getElementById('mt'), ms=document.getElementById('ms'), log=document.getElementById('mlog');
+  if(!SR){mt.disabled=true; return;}
+  let rec=null, t0=0;
+  const add=m=>{log.textContent+=`\n${((Date.now()-t0)/1000).toFixed(1)} s  ${m}`; log.scrollTop=log.scrollHeight;};
+  const off=()=>{mt.disabled=false; ms.disabled=true;};
+  mt.onclick=()=>{
+    stopListening(); if(speechOK) speechSynthesis.cancel();
+    log.textContent=`Modus: ${APPLE?'Safari (fortlaufend)':'Standard'}, Sprache en-GB`; t0=Date.now();
+    try{
+      rec=makeRec();
+      ['start','audiostart','soundstart','speechstart','speechend','soundend','audioend','nomatch'].forEach(ev=>rec.addEventListener(ev,()=>add(ev)));
+      rec.onresult=e=>{const l=e.results[e.results.length-1]; add(`Ergebnis${l.isFinal?' (fertig)':''}: «${[...l].map(a=>a.transcript).join('» / «')}»`);};
+      rec.onerror=e=>add('Fehler: '+e.error+(e.message?' – '+e.message:''));
+      rec.onend=()=>{add('Ende'); off(); rec=null;};
+      rec.start(); add('start() aufgerufen'); mt.disabled=true; ms.disabled=false;
+      const r=rec; activeListen={cancel:()=>{try{r.abort()}catch(x){}}}; // beim Verlassen der Seite beenden
+    }catch(x){add('start() fehlgeschlagen: '+x.message); off();}
+  };
+  ms.onclick=()=>{if(rec){add('stop() aufgerufen'); try{rec.stop()}catch(x){add('stop() fehlgeschlagen: '+x.message)}}};
 }
 
 /* Für Eltern: Spielstand sichern, wiederherstellen, zurücksetzen */
@@ -140,9 +166,15 @@ function parents(msg){
     <textarea id="paste" rows="3" placeholder="Sicherungs-Code hier einfügen" aria-label="Sicherungs-Code einfügen"></textarea>
     <div class="row"><button class="btn" id="restore">Code übernehmen</button></div>
     <p class="err" id="err" role="alert"></p>
+    <h3>Mikrofon testen</h3>
+    <p class="small">Zeigt, was die Spracherkennung dieses Geräts meldet. Starten, ein englisches Wort sagen, dann stoppen.</p>
+    <div class="row"><button class="btn sun" id="mt">Test starten</button><button class="btn" id="ms" disabled>Stoppen</button></div>
+    <pre class="log" id="mlog">${SR?(APPLE?'Modus: Safari (fortlaufend)':'Modus: Standard'):'Dieser Browser hat keine Spracherkennung.'}</pre>
     <h3>Zurücksetzen</h3>
     <div class="row"><button class="btn" id="reset">Fortschritt löschen</button></div>
+    <p class="ver">Version ${VERSION}</p>
   </div>`;
+  micTest();
   const err=document.getElementById('err');
   const take=d=>{
     const x=normalize(d);
@@ -351,7 +383,15 @@ function practiceEnd(got,n){
 
 /* Sprechübungen */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let micBlocked=false, activeRec=null;
+let micBlocked=false, activeListen=null;
+/* Safari (auch Chrome auf iPhone/iPad) beendet die Aufnahme mit continuous=false oft sofort */
+const APPLE=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)
+  ||(/Safari/.test(navigator.userAgent)&&!/Chrome|Chromium|Edg|Android/.test(navigator.userAgent));
+function makeRec(){
+  const r=new SR(); r.lang='en-GB'; r.interimResults=true; r.maxAlternatives=5; r.continuous=APPLE;
+  return r;
+}
+function stopListening(){if(activeListen){activeListen.cancel(); activeListen=null;}}
 let micReason=SR?'':'Dieser Browser kann keine Sprache erkennen. Deshalb hört ein Erwachsener zu.';
 const SOUNDS={one:['won'],two:['to','too'],four:['for'],eight:['ate'],eye:['i','aye'],ear:['year','here'],mum:['mom','mam'],sun:['son']};
 function norm(s){
@@ -370,38 +410,57 @@ function heardOK(target,alts,sentence){
   }
   return sentence?best>=0.75:best===1;
 }
-/* Spracherkennung. Safari (iPhone/iPad) beendet die Aufnahme oft nicht von selbst:
+/* Spracherkennung. Safari beendet die Aufnahme oft gar nicht oder schon bevor gesprochen wird:
    darum Zwischenergebnisse auswerten, nach kurzer Stille oder spätestens nach 8 s selbst stoppen,
-   und stop() für das manuelle Beenden anbieten. onHear(alts) gibt true zurück, wenn es schon passt. */
+   bei einem Ende ohne Ergebnis weiter zuhören, und stop() für das manuelle Beenden anbieten.
+   onHear(alts) gibt true zurück, wenn das Gesagte schon passt. */
 function listen(onDone,onHear){
-  let finished=false, alts=[], rec, silence=null, hard=null, stopping=false;
+  stopListening();
+  let finished=false, stopping=false, alts=[], rec=null, silence=null, hard=null;
+  const t0=Date.now();
   const result=()=>alts.length?{alts}:{error:'no-speech'};
-  const done=r=>{
-    if(finished) return; finished=true; clearTimeout(silence); clearTimeout(hard); activeRec=null;
+  const cancel=()=>{
+    finished=true; clearTimeout(silence); clearTimeout(hard);
     try{rec&&rec.abort()}catch(e){}
+  };
+  const done=r=>{
+    if(finished) return; cancel(); if(activeListen===api) activeListen=null;
     onDone(r);
   };
   const stop=()=>{
     if(finished||stopping) return; stopping=true;
-    try{rec.stop()}catch(e){}
+    try{rec&&rec.stop()}catch(e){}
     setTimeout(()=>done(result()),1200); // falls das Ende-Ereignis ausbleibt
   };
-  try{
-    rec=new SR(); rec.lang='en-GB'; rec.interimResults=true; rec.maxAlternatives=5; rec.continuous=false;
+  function startOne(){
+    if(finished||stopping) return;
+    rec=makeRec();
     rec.onresult=e=>{
       const all=[...e.results], last=all[all.length-1];
       const pre=all.slice(0,-1).map(r=>r[0].transcript).join(' ');
       alts=[...last].map(a=>((pre?pre+' ':'')+a.transcript).trim()).filter(Boolean);
+      if(!alts.length) return;
       if(onHear&&onHear(alts)) return done({alts});
-      if(last.isFinal) return done({alts});
+      if(last.isFinal&&!APPLE) return done({alts});
       clearTimeout(silence); silence=setTimeout(stop,1500);
     };
-    rec.onerror=e=>done(alts.length||['no-speech','aborted'].includes(e.error)?result():{error:e.error});
-    rec.onend=()=>done(result());
-    rec.start(); activeRec=rec;
-    hard=setTimeout(stop,8000);
-  }catch(err){setTimeout(()=>done({error:'start'}),0);}
-  return {stop};
+    rec.onerror=e=>{
+      if(['no-speech','aborted'].includes(e.error)||alts.length) return; // das Ende-Ereignis folgt
+      done({error:e.error});
+    };
+    rec.onend=()=>{
+      if(finished) return;
+      if(alts.length||stopping||Date.now()-t0>7000) return done(result());
+      setTimeout(()=>{try{startOne()}catch(x){done({error:'start'})}},150); // weiter zuhören
+    };
+    rec.start();
+  }
+  const api={stop,cancel};
+  activeListen=api;
+  hard=setTimeout(stop,8000);
+  // kurz warten, damit die Sprachausgabe das Mikrofon freigibt
+  setTimeout(()=>{try{startOne()}catch(x){done({error:'start'})}},250);
+  return api;
 }
 function speakMode(id){
   const t=T(id); const sent=t.kind==='sentences';
@@ -426,7 +485,7 @@ function speakMode(id){
     <button class="btn small skip" id="skip">Überspringen</button>`;
     const fb=app.querySelector('.fb'), hint=document.getElementById('hint'), skip=document.getElementById('skip');
     if(note) fb.textContent=note;
-    const next=()=>{if(activeRec){try{activeRec.abort()}catch(e){}} r++; round();};
+    const next=()=>{stopListening(); r++; round();};
     const success=el=>{
       done=true; got++; grade(id,it.en,true); addStars(1); starFly(el); pop(el);
       fb.textContent=pick(PRAISE)+' Das hast du toll gesagt!';
@@ -462,7 +521,7 @@ function speakMode(id){
           }else if(res.error==='no-speech'){
             fb.textContent='Ich habe nichts gehört. Sprich etwas lauter.';
           }else{
-            fb.textContent='Das hat nicht geklappt. Probier es nochmal.';
+            fb.textContent=`Das hat nicht geklappt (${res.error}). Probier es nochmal.`;
           }
           return;
         }
@@ -526,7 +585,7 @@ function endScreen(id,big,msg,replay){
 function go(route){
   const [s,id,arg]=route.split(':');
   if(speechOK) speechSynthesis.cancel();
-  if(activeRec){try{activeRec.abort()}catch(e){}}
+  stopListening();
   window.scrollTo(0,0);
   if(s==='home') home();
   else if(s==='practice') practice();

@@ -9,6 +9,7 @@
   - Bestehende `id`s und `en`-Texte nicht ändern: daran hängt der Spielstand.
 - Spielstand-Schlüssel `englisch-lernen-v1` in localStorage nicht ändern. Bei Änderungen am Datenformat eine Übernahme der alten Daten einbauen.
   - Inhalt: `stars`, `known` (gelernt pro Thema), `srs` (`'themaId|en'` → `{l: Stufe 0–5, d: fällig am JJJJ-MM-TT}`), `streak` (`{n, last}`), `bonus` (Datum der letzten Extra-Sterne).
+- Bei jeder Veröffentlichung `VERSION` in `js/app.js` erhöhen (unten auf der Startseite sichtbar, so sieht man, ob ein Gerät aktuell ist).
 - Offline: `sw.js` lädt eigene Dateien zuerst aus dem Netz. Neue Dateien in `FILES` eintragen und bei Änderungen an `sw.js` die Version in `CACHE` erhöhen.
 - Jedes Thema braucht mindestens 6 Einträge (Memory) und Emojis, die sich im Quiz klar unterscheiden.
 - Schrift «Baloo 2» liegt in `fonts/` (keine externen Quellen wie Google Fonts einbinden).
