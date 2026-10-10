@@ -11,4 +11,6 @@
   - Inhalt: `stars`, `known` (gelernt pro Thema), `srs` (`'themaId|en'` → `{l: Stufe 0–5, d: fällig am JJJJ-MM-TT}`), `streak` (`{n, last}`), `bonus` (Datum der letzten Extra-Sterne).
 - Offline: `sw.js` lädt eigene Dateien zuerst aus dem Netz. Neue Dateien in `FILES` eintragen und bei Änderungen an `sw.js` die Version in `CACHE` erhöhen.
 - Jedes Thema braucht mindestens 6 Einträge (Memory) und Emojis, die sich im Quiz klar unterscheiden.
-- Nach Änderungen: Syntax prüfen, lokal mit `python3 -m http.server` testen, dann committen und auf `main` pushen.
+- Schrift «Baloo 2» liegt in `fonts/` (keine externen Quellen wie Google Fonts einbinden).
+- Für Eltern (Sichern/Wiederherstellen) nutzt `normalize()`: neue Felder dort mit Standardwert ergänzen.
+- Nach Änderungen: `node scripts/check.js` (läuft auch als GitHub Action), lokal mit `python3 -m http.server` testen, dann committen und auf `main` pushen.

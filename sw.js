@@ -1,8 +1,9 @@
 /* Offline-Betrieb: eigene Dateien zuerst aus dem Netz (damit Updates sofort ankommen),
-   ohne Internet aus dem Zwischenspeicher. Schriften werden einmal geladen und behalten. */
-const CACHE='englisch-lernen-v2';
+   ohne Internet aus dem Zwischenspeicher. */
+const CACHE='englisch-lernen-v3';
 const FILES=['./','index.html','css/style.css','js/data.js','js/app.js','manifest.webmanifest',
-  'icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','icons/favicon.png'];
+  'icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','icons/favicon.png',
+  'fonts/baloo2-latin.woff2'];
 
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()));
@@ -19,9 +20,5 @@ self.addEventListener('fetch',e=>{
       if(res.ok){const copy=res.clone(); caches.open(CACHE).then(c=>c.put(req,copy));}
       return res;
     }).catch(()=>caches.match(req,{ignoreSearch:true}).then(r=>r||caches.match('./'))));
-  }else if(/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)){
-    e.respondWith(caches.match(req).then(r=>r||fetch(req).then(res=>{
-      const copy=res.clone(); caches.open(CACHE).then(c=>c.put(req,copy)); return res;
-    })));
   }
 });

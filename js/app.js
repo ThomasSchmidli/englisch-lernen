@@ -10,16 +10,16 @@ function addDays(s,n){const [y,m,d]=s.split('-').map(Number); return fmt(new Dat
 
 /* Spielstand: stars, known (gelernt pro Thema), srs (Wiederholung pro Eintrag), streak (Tage hintereinander) */
 const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:''});
+/* Gespeicherte Daten (auch ältere Formate und Sicherungen) in die aktuelle Form bringen */
+function normalize(d){
+  if(!d||typeof d!=='object'||typeof d.stars!=='number'||typeof (d.known||{})!=='object') return null;
+  const x={stars:d.stars||0,known:d.known||{},srs:d.srs||{},streak:d.streak||{n:0,last:''},bonus:d.bonus||''};
+  // Übernahme aus v1 ohne Wiederholung: Gelerntes kommt heute zum ersten Mal wieder
+  for(const tid in x.known) for(const en of x.known[tid]){const k=tid+'|'+en; if(!x.srs[k]) x.srs[k]={l:1,d:today()};}
+  return x;
+}
 let data=fresh();
-try{
-  const s=localStorage.getItem(KEY);
-  if(s){
-    const d=JSON.parse(s);
-    data={stars:d.stars||0,known:d.known||{},srs:d.srs||{},streak:d.streak||{n:0,last:''},bonus:d.bonus||''};
-    // Übernahme aus v1 ohne Wiederholung: Gelerntes kommt heute zum ersten Mal wieder
-    for(const tid in data.known) for(const en of data.known[tid]){const k=tid+'|'+en; if(!data.srs[k]) data.srs[k]={l:1,d:today()};}
-  }
-}catch(e){}
+try{const s=localStorage.getItem(KEY); if(s) data=normalize(JSON.parse(s))||fresh();}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){}}
 function learn(tid,en){
   data.known[tid]=data.known[tid]||[]; if(!data.known[tid].includes(en)) data.known[tid].push(en);
@@ -120,11 +120,58 @@ function home(){
   <div class="list two">${sents.map(tileHTML).join('')}</div>
   ${speechOK?'':'<p class="note">Dieses Gerät kann leider nichts vorlesen. Öffne die App am besten in Safari oder Chrome.</p>'}
   ${standalone?'':`<p class="note small">Tipp für Eltern: ${/iPhone|iPad|Macintosh/.test(navigator.userAgent)?'In Safari auf «Teilen» und dann «Zum Home-Bildschirm» tippen.':'Im Browser-Menü «App installieren» oder «Zum Startbildschirm hinzufügen» wählen.'} Dann startet die App wie eine richtige App und läuft auch ohne Internet.</p>`}
-  <button class="reset" id="reset">Fortschritt zurücksetzen</button>`;
+  <button class="reset" data-go="parents">Für Eltern: Spielstand sichern</button>`;
+}
+
+/* Für Eltern: Spielstand sichern, wiederherstellen, zurücksetzen */
+function parents(msg){
+  const code=btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+  const learned=Object.values(data.known).reduce((n,a)=>n+a.length,0);
+  app.innerHTML=`${topbar('home','Für Eltern')}
+  <div class="panel">
+    <p>Der Spielstand (${data.stars} Sterne, ${learned} gelernte Wörter und Sätze) ist nur auf diesem Gerät gespeichert. Sichere ihn ab und zu, zum Beispiel vor einem Gerätewechsel.</p>
+    ${msg?`<p class="okmsg" role="status">${msg}</p>`:''}
+    <h3>Sichern</h3>
+    <div class="row"><button class="btn sun" id="dl">Als Datei speichern</button><button class="btn" id="cp">Code kopieren</button></div>
+    <textarea id="code" readonly rows="3" aria-label="Sicherungs-Code">${code}</textarea>
+    <h3>Wiederherstellen</h3>
+    <p class="small">Datei wählen oder einen Sicherungs-Code einfügen. Der jetzige Spielstand wird dabei ersetzt.</p>
+    <div class="row"><label class="btn" for="file">Datei wählen</label><input type="file" id="file" accept=".json,application/json" hidden></div>
+    <textarea id="paste" rows="3" placeholder="Sicherungs-Code hier einfügen" aria-label="Sicherungs-Code einfügen"></textarea>
+    <div class="row"><button class="btn" id="restore">Code übernehmen</button></div>
+    <p class="err" id="err" role="alert"></p>
+    <h3>Zurücksetzen</h3>
+    <div class="row"><button class="btn" id="reset">Fortschritt löschen</button></div>
+  </div>`;
+  const err=document.getElementById('err');
+  const take=d=>{
+    const x=normalize(d);
+    if(!x){err.textContent='Das ist keine gültige Sicherung.'; return;}
+    data=x; save(); parents('Spielstand wiederhergestellt ✓');
+  };
+  document.getElementById('dl').onclick=()=>{
+    const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`englisch-lernen-spielstand-${today()}.json`; document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
+  };
+  document.getElementById('cp').onclick=async e=>{
+    const ta=document.getElementById('code');
+    try{await navigator.clipboard.writeText(code);}catch(x){ta.select(); try{document.execCommand('copy')}catch(y){}}
+    e.target.textContent='Kopiert ✓';
+  };
+  document.getElementById('file').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    f.text().then(t=>take(JSON.parse(t))).catch(()=>{err.textContent='Die Datei konnte nicht gelesen werden.';});
+  };
+  document.getElementById('restore').onclick=()=>{
+    const v=document.getElementById('paste').value.trim(); if(!v) return;
+    try{take(JSON.parse(decodeURIComponent(escape(atob(v)))));}catch(x){err.textContent='Der Code ist nicht vollständig oder falsch.';}
+  };
   const rb=document.getElementById('reset'); let armed=false;
   rb.onclick=()=>{
     if(!armed){armed=true; rb.textContent='Wirklich alles löschen? Nochmal tippen.'; return;}
-    data=fresh(); save(); home();
+    data=fresh(); save(); parents('Fortschritt gelöscht.');
   };
 }
 
@@ -323,18 +370,38 @@ function heardOK(target,alts,sentence){
   }
   return sentence?best>=0.75:best===1;
 }
-function listen(onDone){
-  let finished=false;
-  const done=r=>{if(finished)return; finished=true; activeRec=null; onDone(r);};
-  let rec;
+/* Spracherkennung. Safari (iPhone/iPad) beendet die Aufnahme oft nicht von selbst:
+   darum Zwischenergebnisse auswerten, nach kurzer Stille oder spätestens nach 8 s selbst stoppen,
+   und stop() für das manuelle Beenden anbieten. onHear(alts) gibt true zurück, wenn es schon passt. */
+function listen(onDone,onHear){
+  let finished=false, alts=[], rec, silence=null, hard=null, stopping=false;
+  const result=()=>alts.length?{alts}:{error:'no-speech'};
+  const done=r=>{
+    if(finished) return; finished=true; clearTimeout(silence); clearTimeout(hard); activeRec=null;
+    try{rec&&rec.abort()}catch(e){}
+    onDone(r);
+  };
+  const stop=()=>{
+    if(finished||stopping) return; stopping=true;
+    try{rec.stop()}catch(e){}
+    setTimeout(()=>done(result()),1200); // falls das Ende-Ereignis ausbleibt
+  };
   try{
-    rec=new SR(); rec.lang='en-GB'; rec.interimResults=false; rec.maxAlternatives=5; rec.continuous=false;
-    rec.onresult=e=>done({alts:[...e.results[0]].map(a=>a.transcript)});
-    rec.onerror=e=>done({error:e.error});
-    rec.onend=()=>done({error:'no-speech'});
+    rec=new SR(); rec.lang='en-GB'; rec.interimResults=true; rec.maxAlternatives=5; rec.continuous=false;
+    rec.onresult=e=>{
+      const all=[...e.results], last=all[all.length-1];
+      const pre=all.slice(0,-1).map(r=>r[0].transcript).join(' ');
+      alts=[...last].map(a=>((pre?pre+' ':'')+a.transcript).trim()).filter(Boolean);
+      if(onHear&&onHear(alts)) return done({alts});
+      if(last.isFinal) return done({alts});
+      clearTimeout(silence); silence=setTimeout(stop,1500);
+    };
+    rec.onerror=e=>done(alts.length||['no-speech','aborted'].includes(e.error)?result():{error:e.error});
+    rec.onend=()=>done(result());
     rec.start(); activeRec=rec;
+    hard=setTimeout(stop,8000);
   }catch(err){setTimeout(()=>done({error:'start'}),0);}
-  return rec;
+  return {stop};
 }
 function speakMode(id){
   const t=T(id); const sent=t.kind==='sentences';
@@ -375,13 +442,16 @@ function speakMode(id){
       document.getElementById('again2').onclick=()=>{check.hidden=true; said.hidden=false; fb.textContent='Hör nochmal genau zu und sprich es nach.'; speak(it.en);};
     }
     const mic=document.getElementById('mic');
+    let listening=null;
     if(mic) mic.onclick=()=>{
-      if(done||busy) return;
+      if(done) return;
+      if(busy){ if(listening) listening.stop(); hint.textContent='Einen Moment …'; return; }
       busy=true;
       if(speechOK) speechSynthesis.cancel();
-      mic.classList.add('live'); hint.textContent='Ich höre zu …'; fb.textContent='';
-      listen(res=>{
-        busy=false; mic.classList.remove('live');
+      mic.classList.add('live'); mic.setAttribute('aria-label','Fertig gesprochen');
+      hint.textContent='Ich höre zu … Wenn du fertig bist, tipp nochmal aufs Mikrofon.'; fb.textContent='';
+      listening=listen(res=>{
+        busy=false; listening=null; mic.classList.remove('live'); mic.setAttribute('aria-label','Jetzt sprechen');
         if(done||!document.body.contains(mic)) return;
         hint.textContent='Tipp aufs Mikrofon und sprich nach.';
         if(res.error){
@@ -403,7 +473,7 @@ function speakMode(id){
           if(tries>=2){skip.textContent='Weiter'; skip.classList.add('sun');}
           setTimeout(()=>speak(it.en),500);
         }
-      });
+      },alts=>heardOK(it.en,alts,sent));
     };
     setTimeout(()=>speak(it.en),300);
   }
@@ -460,6 +530,7 @@ function go(route){
   window.scrollTo(0,0);
   if(s==='home') home();
   else if(s==='practice') practice();
+  else if(s==='parents') parents();
   else if(s==='theme') theme(id);
   else if(s==='explore') explore(id,+(arg||0));
   else if(s==='quiz') quiz(id);

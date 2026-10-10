@@ -32,6 +32,10 @@ und dann http://localhost:8000 öffnen. Die Spracherkennung braucht https oder l
 
 ## Hinweise
 
+- Prüfen: `node scripts/check.js` kontrolliert Inhalte und Offline-Dateiliste
+  (läuft bei jedem Push automatisch als GitHub Action).
+- Sicherung: Startseite → «Für Eltern» → als Datei speichern oder Code kopieren.
+
 - Spielstand: wird im Browser gespeichert (localStorage, Schlüssel `englisch-lernen-v1`).
   Den Schlüssel nicht ändern, sonst beginnt der Spielstand bei null.
 - Sprechübungen: nutzen die Spracherkennung des Browsers (Safari: Diktierfunktion muss
