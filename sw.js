@@ -1,8 +1,8 @@
 /* Offline-Betrieb: eigene Dateien zuerst aus dem Netz (damit Updates sofort ankommen),
    ohne Internet aus dem Zwischenspeicher. */
-const CACHE='englisch-lernen-v9';
+const CACHE='englisch-lernen-v10';
 const LIBS='englisch-lernen-libs'; // Spracherkennung von cdn.jsdelivr.net (feste Version)
-const FILES=['./','index.html','css/style.css','js/data.js','js/app.js','manifest.webmanifest',
+const FILES=['./','index.html','css/style.css','js/data.js','js/logic.js','js/app.js','manifest.webmanifest',
   'icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','icons/favicon.png',
   'fonts/baloo2-latin.woff2'];
 

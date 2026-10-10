@@ -1,50 +1,30 @@
-/* Logik der App: Navigation, Spiele, Sprachausgabe, Spracherkennung, Spielstand. */
+/* Anzeige und Ablauf der App: Navigation, Spiele, Tests, Sprachausgabe, Aufnahme, Spielstand.
+   Reine Logik (Datum, Wiederholung, Sprachvergleich, Auswertung) liegt in js/logic.js. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='9';
+const VERSION='10';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
+/* Spielstand im Browser (Schlüssel nicht ändern, sonst beginnt der Spielstand bei null) */
 const KEY='englisch-lernen-v1';
-/* Datum als «JJJJ-MM-TT» in Ortszeit */
-const pad=n=>String(n).padStart(2,'0');
-const fmt=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const today=()=>fmt(new Date());
-function addDays(s,n){const [y,m,d]=s.split('-').map(Number); return fmt(new Date(y,m-1,d+n));}
-
-/* Spielstand: stars, known (gelernt pro Thema), srs (Wiederholung pro Eintrag), streak (Tage hintereinander) */
-const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:''});
-/* Gespeicherte Daten (auch ältere Formate und Sicherungen) in die aktuelle Form bringen */
-function normalize(d){
-  if(!d||typeof d!=='object'||typeof d.stars!=='number'||typeof (d.known||{})!=='object') return null;
-  const x={stars:d.stars||0,known:d.known||{},srs:d.srs||{},streak:d.streak||{n:0,last:''},bonus:d.bonus||''};
-  // Übernahme aus v1 ohne Wiederholung: Gelerntes kommt heute zum ersten Mal wieder
-  for(const tid in x.known) for(const en of x.known[tid]){const k=tid+'|'+en; if(!x.srs[k]) x.srs[k]={l:1,d:today()};}
-  return x;
-}
 let data=fresh();
 try{const s=localStorage.getItem(KEY); if(s) data=normalize(JSON.parse(s))||fresh();}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){}}
 function learn(tid,en){
   data.known[tid]=data.known[tid]||[]; if(!data.known[tid].includes(en)) data.known[tid].push(en);
-  const k=tid+'|'+en; if(!data.srs[k]) data.srs[k]={l:1,d:addDays(today(),1)};
+  const k=tid+'|'+en; if(!data.srs[k]) data.srs[k]={l:1,d:addDays(today(),1),w:0};
   save();
 }
-/* Wiederholung: Stufe 0–5, richtig = eine Stufe höher und später wieder, falsch = morgen wieder */
-const GAP=[1,1,2,4,7,14];
 function grade(tid,en,ok){
-  const k=tid+'|'+en, s=data.srs[k]||{l:0,d:today()};
-  if(ok){s.l=Math.min(5,s.l+1); s.d=addDays(today(),GAP[s.l]);}
-  else{s.l=0; s.d=addDays(today(),1);}
-  data.srs[k]=s;
+  const k=tid+'|'+en;
+  data.srs[k]=review(data.srs[k],ok,today());
   if(ok) learn(tid,en); else save();
 }
-function markDay(){
-  const t=today(), st=data.streak; if(st.last===t) return;
-  st.n=st.last===addDays(t,-1)?st.n+1:1; st.last=t; save();
-}
-const streakNow=()=>{const st=data.streak; return (st.last===today()||st.last===addDays(today(),-1))?st.n:0;};
+function markDay(){data.streak=nextStreak(data.streak,today()); save();}
+const streakNow=()=>streakValue(data.streak,today());
 function knownCount(t){const k=data.known[t.id]||[]; return t.items.filter(i=>k.includes(i.en)).length;}
 function addStars(n){data.stars+=n; save(); document.querySelectorAll('.stars').forEach(s=>{s.textContent='⭐ '+data.stars; s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop');});}
 
+/* Vorlesen */
 const speechOK='speechSynthesis' in window;
 let voice=null;
 function pickVoice(){
@@ -53,15 +33,8 @@ function pickVoice(){
   voice=vs.find(v=>/^en[-_]GB/i.test(v.lang))||vs.find(v=>/^en/i.test(v.lang))||null;
 }
 if(speechOK){pickVoice(); speechSynthesis.onvoiceschanged=pickVoice;}
-const wait=ms=>new Promise(r=>setTimeout(r,ms));
-/* Wird erfüllt, sobald keine Aufnahme mehr läuft. iOS teilt Lautsprecher und Mikrofon. */
-let micIdle=Promise.resolve(), micRunning=false;
 function speak(t){
-  if(!speechOK) return;
-  if(micRunning){Promise.race([micIdle,wait(1500)]).then(()=>speakNow(t)); return;}
-  speakNow(t);
-}
-function speakNow(t){
+  if(!speechOK||activeRecord) return; // während der Aufnahme nichts vorlesen
   try{
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(t);
@@ -74,6 +47,8 @@ function speakNow(t){
 const app=document.getElementById('app');
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const T=id=>THEMES.find(t=>t.id===id);
+const L=n=>LEVELS.find(l=>l.n===+n);
+const levelThemes=n=>THEMES.filter(t=>t.level===+n);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
@@ -87,6 +62,8 @@ const starBadge=()=>`<span class="stars" aria-label="${data.stars} Sterne">⭐ $
 const streakBadge=()=>{const n=streakNow(); return n?`<span class="streak" aria-label="${n} Tage hintereinander geübt">🔥 ${n}</span>`:'';};
 const topbar=(back,title)=>`<div class="top">${back?`<button class="btn small" data-go="${back}">‹ Zurück</button>`:'<span></span>'}<h2>${title||''}</h2>${starBadge()}</div>`;
 const dots=(n,r)=>`<div class="dots" aria-label="Aufgabe ${r+1} von ${n}">${Array.from({length:n},(_,k)=>`<span class="${k<r?'done':k===r?'now':''}"></span>`).join('')}</div>`;
+const bestOf=key=>(data.tests[key]||{}).best||0;
+const medalBadge=key=>{const m=medalFor(bestOf(key)); return m?`<span class="medal" aria-label="${m.name}-Medaille">${m.icon}</span>`:'';};
 
 function pop(el){if(!el)return; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');}
 function nope(el){el.classList.remove('nope'); void el.offsetWidth; el.classList.add('nope');}
@@ -101,14 +78,21 @@ function tileHTML(t){
   const k=knownCount(t), n=t.items.length, unit=t.kind==='sentences'?'Sätzen':'Wörtern';
   return `<button class="btn tile" data-go="theme:${t.id}">
     <span class="icon" style="background:${t.color}">${t.icon}</span>
-    <span class="tx"><span class="name">${t.name}</span>
+    <span class="tx"><span class="name">${t.name} ${medalBadge('theme:'+t.id)}</span>
     <span class="meta">${k} von ${n} ${unit} gelernt</span>
     <span class="bar"><span style="width:${Math.round(k/n*100)}%;background:${t.color}"></span></span></span>
   </button>`;
 }
+function levelTestTile(l){
+  const best=bestOf('level:'+l.n);
+  return `<button class="btn tile ltest" data-go="ltest:${l.n}">
+    <span class="icon" style="background:var(--sun)">📝</span>
+    <span class="tx"><span class="name">Test ${l.name} ${medalBadge('level:'+l.n)}</span>
+    <span class="meta">${best?`Bestes Ergebnis: ${best} %`:'Zeig, was du in diesem Level kannst!'}</span></span>
+  </button>`;
+}
 
 function home(){
-  const words=THEMES.filter(t=>t.kind==='words'), sents=THEMES.filter(t=>t.kind==='sentences');
   const p=practiceInfo(), n=streakNow(), doneToday=data.streak.last===today();
   const pmeta=doneToday?'Heute schon geübt ✓ Du kannst gern nochmal.'
     :p.due?`${p.due} ${p.due===1?'Wort wartet':'Wörter und Sätze warten'} auf dich.`
@@ -123,85 +107,73 @@ function home(){
     <span class="icon" style="background:var(--sun)">⭐</span>
     <span class="tx"><span class="name">Heute üben</span><span class="meta">${pmeta}</span></span>
   </button>
-  <h3 class="sec">Wörter</h3>
-  <div class="list two">${words.map(tileHTML).join('')}</div>
-  <h3 class="sec">Sätze</h3>
-  <div class="list two">${sents.map(tileHTML).join('')}</div>
+  ${LEVELS.map(l=>`<h3 class="sec">${l.icon} ${l.name} <span class="sub">${l.sub}</span></h3>
+  <div class="list two">${levelThemes(l.n).map(tileHTML).join('')}${levelTestTile(l)}</div>`).join('')}
   ${speechOK?'':'<p class="note">Dieses Gerät kann leider nichts vorlesen. Öffne die App am besten in Safari oder Chrome.</p>'}
   ${standalone?'':`<p class="note small">Tipp für Eltern: ${/iPhone|iPad|Macintosh/.test(navigator.userAgent)?'In Safari auf «Teilen» und dann «Zum Home-Bildschirm» tippen.':'Im Browser-Menü «App installieren» oder «Zum Startbildschirm hinzufügen» wählen.'} Dann startet die App wie eine richtige App und läuft auch ohne Internet.</p>`}
-  <button class="reset" data-go="parents">Für Eltern: Spielstand sichern, Sprechen einstellen</button>
+  <button class="reset" data-go="parents">Für Eltern: Übersicht, Spielstand sichern, Sprechen einstellen</button>
   <p class="ver">Version ${VERSION}</p>`;
 }
 
-/* Für Eltern: Eingabeweg wählen und Spracherkennung mit derselben Logik wie im Spiel testen */
-function micTest(){
-  const mt=document.getElementById('mt'), ms=document.getElementById('ms'), log=document.getElementById('mlog');
-  const mi=document.getElementById('minput'), mc=document.getElementById('mcont'), ml=document.getElementById('mlang'), mok=document.getElementById('mok');
-  const kt=document.getElementById('ktest'), kout=document.getElementById('kout');
-  mi.value=micOpts.input; mc.value=micOpts.cont?'1':'0'; ml.value=micOpts.lang;
-  const show=()=>{
-    document.getElementById('micbox').hidden=micOpts.input!=='mic';
-    document.getElementById('localbox').hidden=micOpts.input!=='local';
-    document.getElementById('kbbox').hidden=micOpts.input!=='keyboard';
-    mok.textContent=micOpts.lang==='auto'?`Zuletzt erfolgreich: ${micOpts.ok==null?'noch keine':(micOpts.ok||'wie Gerät')}`+(micOpts.bad.length?` · übersprungen: ${micOpts.bad.map(l=>l||'wie Gerät').join(', ')}`:''):'';
-  };
-  show();
-  mi.onchange=()=>{micOpts.input=mi.value; micBlocked=false; micFails=0; saveMic(); show();};
-  mc.onchange=ml.onchange=()=>{micOpts.cont=mc.value==='1'; micOpts.lang=ml.value; micOpts.bad=[]; micBlocked=false; saveMic(); show();};
-  // Test der Erkennung auf dem Gerät
-  const lt=document.getElementById('lt'), ls=document.getElementById('ls'), llog=document.getElementById('llog'), lstate=document.getElementById('lstate');
-  if(LOCAL_OK){
-    const st=v=>{if(!document.body.contains(lstate)){asrWatch.delete(st); return;} lstate.textContent=v>=1?'Spracherkennung bereit ✓':asrPromise?`Spracherkennung wird geladen … ${Math.round(v*100)} %`:'Spracherkennung noch nicht geladen.';};
-    asrWatch.add(st); st(asrProgress);
-    let lcur=null, lok=0, ltotal=0, l0=0;
-    const ladd=m=>{llog.textContent+=`\n${((performance.now()-l0)/1000).toFixed(1)} s  ${m}`; llog.scrollTop=llog.scrollHeight;};
-    lt.onclick=()=>{
-      if(lcur) return;
-      if(!ltotal){llog.textContent=''; l0=performance.now();}
-      ltotal++; lt.disabled=true; ls.disabled=false;
-      ladd(`— Versuch ${ltotal}: jetzt «dog» sagen —`);
-      if(asrProgress<1) loadASR().then(()=>st(1)).catch(e=>ladd('Laden fehlgeschlagen: '+e.message));
-      const t1=performance.now();
-      let t2=0;
-      lcur=hearLocal(s=>{if(s==='think') t2=performance.now(); ladd(s==='listen'?'Aufnahme läuft':`Aufnahme fertig nach ${((performance.now()-t1)/1000).toFixed(1)} s, prüfe …`);},null,'dog',T('animals').items.map(x=>x.en),false);
-      lcur.result.then(res=>{
-        lcur=null; lt.disabled=false; ls.disabled=true;
-        if(!res) return;
-        if(res.alts){if(res.ok) lok++; ladd(`gehört: «${res.alts[0]}» → ${res.ok?'«dog» richtig ✓':'nicht «dog» ✗'} (${((performance.now()-t2)/1000).toFixed(1)} s)`);}
-        else ladd('Fehler: '+res.error+(res.detail?' – '+res.detail:''));
-        ladd(`Bisher ${lok} von ${ltotal} richtig.`);
-      });
-    };
-    ls.onclick=()=>{if(lcur) lcur.stop();};
-  }
-  kt.oninput=()=>{kout.textContent=kt.value?`Erkannt: «${kt.value}» → ${heardOK('dog',[kt.value],false)?'«dog» richtig ✓':'nicht «dog»'}`:'';};
-  if(!SR){mt.disabled=true; log.textContent='Dieser Browser hat keine Spracherkennung. Nimm die Tastatur-Diktierfunktion.'; return;}
-  let t0=0, cur=null, ok=0, total=0;
-  const add=m=>{log.textContent+=`\n${((Date.now()-t0)/1000).toFixed(1)} s  ${m}`; log.scrollTop=log.scrollHeight;};
-  mt.onclick=()=>{
-    if(cur) return;
-    if(!total){log.textContent=''; t0=Date.now();}
-    total++; mt.disabled=true; ms.disabled=false;
-    add(`— Versuch ${total}: jetzt «dog» sagen —`);
-    micDebug=m=>{if(document.body.contains(log)) add(m); else micDebug=null;};
-    cur=listen(res=>{
-      cur=null; if(res.alts) ok++;
-      mt.disabled=false; ms.disabled=true; show();
-      add(`Bisher ${ok} von ${total} Versuchen erkannt.`+(total<3?' Nochmal auf «Test starten» tippen.':''));
-    });
-  };
-  ms.onclick=()=>{if(cur) cur.stop();};
+/* Für Eltern: Fortschritt pro Level und Thema, schwierige Wörter */
+function overviewHTML(){
+  const t0=today(), all=Object.entries(data.srs);
+  const due=all.filter(([,s])=>s.d<=t0).length, strong=all.filter(([,s])=>s.l>=4).length;
+  const hard=all.filter(([,s])=>s.w>0).sort((a,b)=>b[1].w-a[1].w||a[1].l-b[1].l).slice(0,10).map(([k,s])=>{
+    const [tid,en]=k.split('|'), t=T(tid), it=t&&t.items.find(i=>i.en===en);
+    return it?`<li><b>${en}</b> – ${it.de} <span class="small">(${s.w}× falsch, Stufe ${s.l} von 5)</span></li>`:'';
+  }).join('');
+  return `<h3>Übersicht</h3>
+    <p class="small">${all.length} Wörter und Sätze angefangen, ${strong} sitzen schon gut (Stufe 4–5), ${due} sind heute zum Wiederholen dran.</p>
+    <div class="ov">${LEVELS.map(l=>`<div class="ovl"><p class="ovh">${l.icon} ${l.name} ${medalBadge('level:'+l.n)}${bestOf('level:'+l.n)?` <span class="small">Test ${bestOf('level:'+l.n)} %</span>`:''}</p>
+      ${levelThemes(l.n).map(t=>{const k=knownCount(t), n=t.items.length, b=bestOf('theme:'+t.id);
+        return `<div class="ovr"><span>${t.icon} ${t.name}</span><span class="bar"><span style="width:${Math.round(k/n*100)}%;background:${t.color}"></span></span><span class="small">${k}/${n}${b?` · ${medalBadge('theme:'+t.id)} ${b} %`:''}</span></div>`;}).join('')}</div>`).join('')}</div>
+    <h3>Schwierige Wörter</h3>
+    ${hard?`<ul class="hard">${hard}</ul><p class="small">Diese Wörter kommen bei «Heute üben» automatisch öfter dran.</p>`:'<p class="small">Noch keine Fehler gespeichert.</p>'}`;
 }
 
-/* Für Eltern: Spielstand sichern, wiederherstellen, zurücksetzen */
+/* Für Eltern: Sprechen einstellen und testen */
+function micTest(){
+  const mi=document.getElementById('minput');
+  mi.value=micOpts.input;
+  const show=()=>{document.getElementById('localbox').hidden=micOpts.input!=='local';};
+  show();
+  mi.onchange=()=>{micOpts.input=mi.value; micBlocked=false; saveMic(); show();};
+  if(!LOCAL_OK) return;
+  const lt=document.getElementById('lt'), ls=document.getElementById('ls'), llog=document.getElementById('llog'), lstate=document.getElementById('lstate');
+  const st=v=>{if(!document.body.contains(lstate)){asrWatch.delete(st); return;} lstate.textContent=v>=1?'Spracherkennung bereit ✓':asrPromise?`Spracherkennung wird geladen … ${Math.round(v*100)} %`:'Spracherkennung noch nicht geladen.';};
+  asrWatch.add(st); st(asrProgress);
+  let lcur=null, lok=0, ltotal=0, l0=0;
+  const ladd=m=>{llog.textContent+=`\n${((performance.now()-l0)/1000).toFixed(1)} s  ${m}`; llog.scrollTop=llog.scrollHeight;};
+  lt.onclick=()=>{
+    if(lcur) return;
+    if(!ltotal){llog.textContent=''; l0=performance.now();}
+    ltotal++; lt.disabled=true; ls.disabled=false;
+    ladd(`— Versuch ${ltotal}: jetzt «dog» sagen —`);
+    if(asrProgress<1) loadASR().then(()=>st(1)).catch(e=>ladd('Laden fehlgeschlagen: '+e.message));
+    const t1=performance.now(); let t2=0;
+    lcur=hearLocal(s=>{if(s==='think') t2=performance.now(); ladd(s==='listen'?'Aufnahme läuft':`Aufnahme fertig nach ${((performance.now()-t1)/1000).toFixed(1)} s, prüfe …`);},null,'dog',T('animals').items.map(x=>x.en),false);
+    lcur.result.then(res=>{
+      lcur=null; lt.disabled=false; ls.disabled=true;
+      if(!res) return;
+      if(res.alts){if(res.ok) lok++; ladd(`gehört: «${res.alts[0]}» → ${res.ok?'«dog» richtig ✓':'nicht «dog» ✗'} (${((performance.now()-t2)/1000).toFixed(1)} s)`);}
+      else ladd('Fehler: '+res.error+(res.detail?' – '+res.detail:''));
+      ladd(`Bisher ${lok} von ${ltotal} richtig.`);
+    });
+  };
+  ls.onclick=()=>{if(lcur) lcur.stop();};
+}
+
+/* Für Eltern: Übersicht, Spielstand sichern/wiederherstellen/zurücksetzen, Sprechen */
 function parents(msg){
   const code=btoa(unescape(encodeURIComponent(JSON.stringify(data))));
   const learned=Object.values(data.known).reduce((n,a)=>n+a.length,0);
   app.innerHTML=`${topbar('home','Für Eltern')}
   <div class="panel">
-    <p>Der Spielstand (${data.stars} Sterne, ${learned} gelernte Wörter und Sätze) ist nur auf diesem Gerät gespeichert. Sichere ihn ab und zu, zum Beispiel vor einem Gerätewechsel.</p>
     ${msg?`<p class="okmsg" role="status">${msg}</p>`:''}
+    ${overviewHTML()}
     <h3>Sichern</h3>
+    <p class="small">Der Spielstand (${data.stars} Sterne, ${learned} gelernte Wörter und Sätze) ist nur auf diesem Gerät gespeichert. Sichere ihn ab und zu, zum Beispiel vor einem Gerätewechsel.</p>
     <div class="row"><button class="btn sun" id="dl">Als Datei speichern</button><button class="btn" id="cp">Code kopieren</button></div>
     <textarea id="code" readonly rows="3" aria-label="Sicherungs-Code">${code}</textarea>
     <h3>Wiederherstellen</h3>
@@ -210,31 +182,16 @@ function parents(msg){
     <textarea id="paste" rows="3" placeholder="Sicherungs-Code hier einfügen" aria-label="Sicherungs-Code einfügen"></textarea>
     <div class="row"><button class="btn" id="restore">Code übernehmen</button></div>
     <p class="err" id="err" role="alert"></p>
-    <h3>Sprechen und Mikrofon</h3>
-    <p class="small">So spricht das Kind in der Übung «Sprechen». Die Einstellung gilt sofort für die ganze App.</p>
+    <h3>Sprechen</h3>
+    <p class="small">So prüft die App die Übung «Sprechen». Die Einstellung gilt sofort.</p>
     <div class="row opts">
-      <label>Sprechen über <select id="minput">${LOCAL_OK?'<option value="local">Erkennung auf dem Gerät (empfohlen)</option>':''}<option value="mic">Safari-Spracherkennung${APPLE?' (auf iPad unzuverlässig)':''}</option><option value="keyboard">Tastatur-Diktierfunktion</option><option value="parent">Eltern-Check</option></select></label>
+      <label>Wer hört zu? <select id="minput">${LOCAL_OK?'<option value="local">Die App (Erkennung auf dem Gerät)</option>':''}<option value="parent">Ein Erwachsener (Eltern-Check)</option></select></label>
     </div>
     <div id="localbox">
       <p class="small">Die Aufnahme wird direkt auf diesem Gerät erkannt und nicht verschickt. Beim ersten Mal wird die Spracherkennung (ca. 41 MB) geladen, danach klappt es auch ohne Internet.</p>
       <p class="small" id="lstate"></p>
       <div class="row"><button class="btn sun" id="lt">Test starten</button><button class="btn" id="ls" disabled>Stoppen</button></div>
       <pre class="log" id="llog">Auf «Test starten» tippen und «dog» sagen. Mehrmals wiederholen.</pre>
-    </div>
-    <div id="micbox">
-      <div class="row opts">
-        <label>Aufnahme <select id="mcont"><option value="0">einzeln</option><option value="1">fortlaufend</option></select></label>
-        <label>Sprache <select id="mlang"><option value="auto">automatisch</option><option value="en-GB">en-GB</option><option value="en-US">en-US</option><option value="">wie Gerät</option></select></label>
-      </div>
-      <p class="small" id="mok"></p>
-      <p class="small">Auf «Test starten» tippen, «dog» sagen. Mehrmals wiederholen: Klappt es jedes Mal?</p>
-      <div class="row"><button class="btn sun" id="mt">Test starten</button><button class="btn" id="ms" disabled>Stoppen</button></div>
-      <pre class="log" id="mlog">Bereit.</pre>
-    </div>
-    <div id="kbbox">
-      <p class="small">Ins Feld tippen, auf der Tastatur 🎤 antippen und «dog» sagen. Die Tastatur muss auf Englisch stehen (Weltkugel 🌐 gedrückt halten).</p>
-      <input class="ktest" id="ktest" type="text" lang="en" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Hier tippen, dann 🎤">
-      <p class="small" id="kout"></p>
     </div>
     <h3>Zurücksetzen</h3>
     <div class="row"><button class="btn" id="reset">Fortschritt löschen</button></div>
@@ -286,6 +243,8 @@ function theme(id){
     ['memory','🃏','Memory','Bild und Wort zusammen finden'],
     ['speak','🎤','Sprechen','Wörter nachsprechen – die App hört zu']
   ];
+  const best=bestOf('theme:'+id);
+  modes.push(['ttest','📝','Test',best?`Bestes Ergebnis: ${best} % ${medalBadge('theme:'+id)}`:'Hören, lesen, übersetzen – ohne Hilfe']);
   app.innerHTML=`${topbar('home',t.name)}
   <div class="list">${modes.map(m=>`<button class="btn tile" data-go="${m[0]}:${id}">
     <span class="icon" style="background:${t.color}">${m[1]}</span>
@@ -447,138 +406,80 @@ function practiceEnd(got,n){
   <button class="btn" data-go="home">Zur Startseite</button></div></div>`;
 }
 
-/* Sprechübungen */
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let micBlocked=false, activeListen=null, micDebug=null;
-let micReason=SR?'':'Dieser Browser kann keine Sprache erkennen. Deshalb hört ein Erwachsener zu.';
-const APPLE=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)
-  ||(/Safari/.test(navigator.userAgent)&&!/Chrome|Chromium|Edg|Android/.test(navigator.userAgent));
-/* Einstellungen der Spracherkennung pro Gerät (eigener Schlüssel, nicht im Spielstand).
-   input: 'mic' (App-Mikrofon), 'keyboard' (Diktat über die iPad-Tastatur), 'parent' (Eltern-Check)
-   lang 'auto': englische Sprachen des Geräts, dann en-GB, en-US, Gerätesprache.
-   ok = zuletzt erfolgreiche Sprache, bad = Sprachen, die sofort abgebrochen haben */
-const MICKEY='englisch-lernen-mic';
-/* Standard ist die Erkennung auf dem Gerät ('local'): die Safari-Erkennung liefert auf iPhone/iPad
-   oft nur Stille, und die Tastatur-Diktierfunktion hängt von der Tastatursprache ab. */
-const LOCAL_OK=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.WebAssembly&&(window.AudioContext||window.webkitAudioContext));
-let micOpts={v:4,input:LOCAL_OK?'local':SR?'mic':'parent',cont:false,lang:'auto',ok:null,bad:[]};
-try{
-  const m=JSON.parse(localStorage.getItem(MICKEY)||'null');
-  if(m&&m.v===4) micOpts={...micOpts,...m};
-  else if(m&&(m.v===2||m.v===3)) micOpts={...micOpts,...m,v:4,input:m.input==='parent'||!LOCAL_OK?m.input:'local'};
-  else if(m) micOpts.ok=m.ok??null; // ältere Einstellungen: nur die erfolgreiche Sprache übernehmen
-}catch(e){}
-function saveMic(){try{localStorage.setItem(MICKEY,JSON.stringify(micOpts))}catch(e){}}
-function micLangs(){
-  if(micOpts.lang!=='auto') return [micOpts.lang];
-  const dev=(navigator.languages||[navigator.language]).filter(l=>/^en(-|$)/i.test(l||''));
-  const all=[...new Set([micOpts.ok,...dev,'en-GB','en-US',''].filter(x=>x!=null))];
-  const good=all.filter(l=>!micOpts.bad.includes(l));
-  return good.length?good:all;
+/* Tests: pro Thema (10 Aufgaben) oder pro Level (12 Aufgaben aus allen Themen des Levels).
+   Jede Aufgabe nur ein Versuch. Arten: hören → Bild, Bild → englisches Wort, Deutsch → Englisch, Satz bauen. */
+function choiceStep(tid,it,pool,kind,head,onDone){
+  let done=false;
+  const opts=shuffle([it,...shuffle(pool.filter(x=>x!==it)).slice(0,3)]);
+  const sent=!!it.s;
+  const prompt={
+    hear:`<div class="ask"><button class="btn speaker sun" id="again" aria-label="Nochmal hören">🔊</button><p>Hör zu und tipp auf das richtige Bild.</p></div>`,
+    read:`<div class="bcard">${vis(it,'md')}<p class="de">Wie heisst das auf Englisch?</p></div>`,
+    translate:`<div class="bcard"><p class="qde">${it.de}</p><p class="de">Was heisst das auf Englisch?</p></div>`
+  }[kind];
+  const label=o=>kind==='hear'?vis(o,'md'):`<span class="otext${sent?' sent':''}">${o.en}</span>`;
+  app.innerHTML=`${head}${prompt}
+  <div class="grid${kind==='hear'?'':' words'}">${opts.map((o,k)=>`<button class="btn opt${kind==='hear'?'':' txt'}" data-k="${k}" aria-label="${kind==='hear'?'Antwort '+(k+1):o.en}">${label(o)}</button>`).join('')}</div>
+  <p class="fb" aria-live="polite"></p>`;
+  const fb=app.querySelector('.fb'), btns=[...app.querySelectorAll('.opt')];
+  const again=document.getElementById('again'); if(again) again.onclick=()=>speak(it.en);
+  btns.forEach(b=>b.onclick=()=>{
+    if(done) return; done=true;
+    const ok=opts[+b.dataset.k]===it;
+    btns.forEach(x=>{x.disabled=true; if(opts[+x.dataset.k]===it) x.classList.add('right');});
+    if(ok){pop(b); addStars(1); starFly(b); fb.textContent=`${pick(PRAISE)} «${it.en}» heisst «${it.de}»`;}
+    else{b.classList.add('wrong'); fb.textContent=`Richtig wäre: «${it.en}» – ${it.de}`;}
+    grade(tid,it.en,ok);
+    speak(it.en);
+    setTimeout(()=>onDone(ok),ok?1500:2600);
+  });
+  if(kind==='hear') setTimeout(()=>speak(it.en),300);
 }
-function makeRec(o){
-  const r=new SR(); if(o.lang) r.lang=o.lang; r.interimResults=true; r.maxAlternatives=5; r.continuous=o.cont;
-  return r;
+function testQuestions(themes,n){
+  // gleichmässig aus den Themen ziehen, damit ein Level-Test alle Themen abdeckt
+  const bags=shuffle(themes).map(t=>shuffle(t.items).map(it=>({t,it})));
+  const list=[];
+  while(list.length<n&&bags.some(b=>b.length)) for(const b of bags){if(b.length&&list.length<n) list.push(b.pop());}
+  // Aufgabenarten gleichmässig verteilen, dann mischen; Sätze dürfen statt «lesen» auch gebaut werden
+  const kinds=['hear','read','translate'];
+  return shuffle(shuffle(list).map((q,i)=>({...q,kind:q.it.s&&i%3===1?'build':kinds[i%3]})));
 }
-const SERVICE_HINT='Prüfe auf dem iPad: Einstellungen → Allgemein → Tastatur → «Diktierfunktion aktivieren» und unter Bildschirmzeit → Beschränkungen → Erlaubte Apps → «Siri & Diktierfunktion».';
-function stopListening(){if(activeListen){activeListen.cancel(); activeListen=null;}}
+function runTest(key,title,back,themes,n){
+  const qs=testQuestions(themes,n); let r=0, got=0;
+  function round(){
+    if(r>=qs.length) return testEnd(key,title,back,got,qs.length);
+    const {t,it,kind}=qs[r];
+    const head=topbar(back,title)+dots(qs.length,r)+(themes.length>1?`<p class="from">${t.icon} ${t.name}</p>`:'');
+    const next=ok=>{if(ok)got++; r++; round();};
+    if(kind==='build') buildStep(t.id,it,head,next);
+    else choiceStep(t.id,it,t.items,kind,head,next);
+  }
+  round();
+}
+function testEnd(key,title,back,got,n){
+  const prev=bestOf(key), res=testResult(got,n,prev);
+  data.tests[key]={best:res.best,last:res.pct,date:today()};
+  if(res.bonus) addStars(res.bonus); else save();
+  markDay();
+  const big=res.pct===100?'Alles richtig!':res.passed?'Bestanden!':res.pct>=50?'Gut gemacht!':'Weiter üben!';
+  const improved=res.pct>prev&&prev>0?` Besser als dein bisher bestes Ergebnis (${prev} %)!`:'';
+  app.innerHTML=`${topbar(back,'')}
+  <div class="end"><div class="trophy">${res.medal?res.medal.icon:'💪'}</div><h2>${big}</h2>
+  <p>${title}: ${got} von ${n} richtig (${res.pct} %).${res.medal?` Das ist ${res.medal.name}!`:' Ab 50 % gibt es eine Medaille.'}${improved}${res.bonus?` Dafür gibt es ${res.bonus===1?'einen Extra-Stern':res.bonus+' Extra-Sterne'}.`:''}</p>
+  <div class="col"><button class="btn sun" data-go="${key.startsWith('level:')?'ltest:'+key.slice(6):'ttest:'+key.slice(6)}">Test nochmal machen</button>
+  ${res.passed?'':'<button class="btn" data-go="practice">Mit «Heute üben» trainieren</button>'}
+  <button class="btn" data-go="${back}">Zurück</button></div></div>`;
+}
+function themeTest(id){const t=T(id); runTest('theme:'+id,'Test: '+t.name,'theme:'+id,[t],Math.min(10,t.items.length));}
+function levelTest(n){const l=L(n); runTest('level:'+n,'Test '+l.name,'home',levelThemes(n),12);}
 
-/* Spracherkennung, vorsichtig für Safari auf iPhone/iPad:
-   - ein Antippen = genau eine Aufnahme, gestartet direkt im Antippen (keine automatischen Neustarts:
-     schnell folgende Aufnahmen bekommen auf iOS oft nur Stille)
-   - mindestens 1 s Abstand zur vorherigen Aufnahme, die vorher sauber mit stop() beendet wird
-   - Zwischenergebnisse auswerten, nach Stille oder spätestens nach 9 s selbst stoppen; stop() beendet manuell
-   - bricht eine Sprache sofort ab, wird sie gemerkt und beim nächsten Mal übersprungen
-   onHear(alts) gibt true zurück, wenn das Gesagte schon passt. */
-let micLastEnd=0;
-function listen(onDone,onHear){
-  stopListening();
-  const langs=micLangs(), lang=langs[0];
-  let finished=false, stopping=false, alts=[], rec=null, silence=null, hard=null, watchdog=null, alive=false, lastErr='', began=0;
-  const log=m=>{if(micDebug) micDebug(m);};
-  const result=()=>alts.length?{alts}:{error:'no-speech'};
-  const cancel=()=>{
-    if(finished) return;
-    finished=true; clearTimeout(silence); clearTimeout(hard); clearTimeout(watchdog);
-    if(rec){const r=rec; try{r.stop()}catch(e){} setTimeout(()=>{try{r.abort()}catch(e){}},1500);}
-  };
-  const done=r=>{
-    if(finished) return; cancel(); if(activeListen===api) activeListen=null;
-    if(r.alts&&micOpts.lang==='auto'){micOpts.ok=lang; micOpts.bad=micOpts.bad.filter(l=>l!==lang); saveMic();}
-    log(r.alts?'fertig: «'+r.alts[0]+'»':'fertig: '+r.error);
-    onDone(r);
-  };
-  const stop=()=>{
-    if(finished||stopping) return; stopping=true; log('stoppen');
-    try{rec&&rec.stop()}catch(e){}
-    setTimeout(()=>done(result()),1200); // falls das Ende-Ereignis ausbleibt
-  };
-  const fail=x=>{log('start() fehlgeschlagen: '+x.name+' '+x.message); setTimeout(()=>done({error:x.name==='NotAllowedError'?'not-allowed':'stuck'}),0);};
-  function startNow(){
-    if(finished||stopping) return;
-    const r=makeRec({cont:micOpts.cont,lang}); rec=r;
-    let endRes; micRunning=true;
-    micIdle=new Promise(res=>endRes=()=>{if(!micRunning) return; micRunning=false; micLastEnd=Date.now(); res();});
-    began=Date.now();
-    const live=ev=>{log(ev); if(ev==='start') began=Date.now(); if(r===rec&&!alive){alive=true; clearTimeout(watchdog);}};
-    ['start','audiostart','speechstart','speechend','audioend'].forEach(ev=>r.addEventListener(ev,()=>live(ev)));
-    r.onresult=e=>{
-      if(r!==rec||finished) return; live('ergebnis');
-      const all=[...e.results], last=all[all.length-1];
-      const pre=all.slice(0,-1).map(x=>x[0].transcript).join(' ');
-      alts=[...last].map(a=>((pre?pre+' ':'')+a.transcript).trim()).filter(Boolean);
-      if(!alts.length) return;
-      log('hört: «'+alts[0]+'»');
-      if(onHear&&onHear(alts)) return done({alts});
-      if(last.isFinal&&!micOpts.cont) return done({alts});
-      clearTimeout(silence); silence=setTimeout(stop,1500);
-    };
-    r.onerror=e=>{
-      log('Fehler: '+e.error+(e.message?' – '+e.message:''));
-      if(r!==rec||finished) return;
-      lastErr=e.error;
-      if(['no-speech','aborted','language-not-supported'].includes(e.error)||alts.length) return; // das Ende-Ereignis folgt
-      done({error:e.error});
-    };
-    r.onend=()=>{
-      endRes(); log('Ende');
-      if(r!==rec||finished) return;
-      if(!alts.length&&!stopping&&(lastErr==='language-not-supported'||(lastErr==='aborted'&&Date.now()-began<1000))){
-        // Sprache nicht verfügbar: merken und beim nächsten Antippen eine andere nehmen
-        if(micOpts.lang==='auto'){
-          micOpts.bad=[...new Set([...micOpts.bad,lang])]; if(micOpts.ok===lang) micOpts.ok=null;
-          const left=micLangs().filter(l=>!micOpts.bad.includes(l)).length;
-          if(!left) micOpts.bad=[];
-          saveMic();
-          return done({error:left?'lang':'service'});
-        }
-        return done({error:'service'});
-      }
-      done(result());
-    };
-    watchdog=setTimeout(()=>{ // iOS: start() ohne jede Reaktion
-      if(alive||finished||r!==rec) return;
-      log('keine Reaktion');
-      try{r.abort()}catch(e){} endRes();
-      done({error:'stuck'});
-    },2500);
-    log('start '+(lang||'wie Gerät')+(micOpts.cont?' fortlaufend':' einzeln'));
-    r.start();
-  }
-  const api={stop,cancel};
-  activeListen=api;
-  hard=setTimeout(stop,9000);
-  if(speechOK) speechSynthesis.cancel();
-  if(micRunning||Date.now()-micLastEnd<1000){
-    log('warte kurz auf das Ende der letzten Aufnahme');
-    Promise.race([micIdle,wait(1500)])
-      .then(()=>wait(Math.max(0,1000-(Date.now()-micLastEnd))))
-      .then(()=>{try{startNow()}catch(x){fail(x)}});
-  }else{
-    try{startNow()}catch(x){fail(x)} // direkt im Antippen starten
-  }
-  return api;
-}
+/* Sprechübungen */
+const SR_HINT='Das Mikrofon ist nicht freigegeben (Einstellungen → Safari → Mikrofon). Deshalb hört ein Erwachsener zu.';
+let micBlocked=false, micReason='';
+/* Einstellung pro Gerät (eigener Schlüssel, nicht im Spielstand): input 'local' (die App hört zu) oder 'parent'.
+   Die Safari-Spracherkennung und das Tastatur-Diktat wurden entfernt: auf dem iPad lieferte die eine meist
+   nur Stille, das andere hing von der Tastatursprache ab. */
+const MICKEY='englisch-lernen-mic';
 /* Erkennung auf dem Gerät: Aufnahme über getUserMedia, Erkennung mit Whisper (Transformers.js).
    Bibliothek von cdn.jsdelivr.net, Modell (~41 MB) einmalig von huggingface.co, danach im Zwischenspeicher.
    Die Aufnahme verlässt das Gerät nicht. */
@@ -642,7 +543,8 @@ function recordVoice(onLevel){
       // nur den gesprochenen Teil (mit etwas Rand) an Whisper geben
       const all=new Float32Array(len); let o=0; for(const c of chunks){all.set(c,o); o+=c.length;}
       const a=Math.max(0,Math.floor((first-.35)*rate)), b=Math.min(len,Math.ceil((last+.45)*rate));
-      finish({speech:true,audio:resample(all.subarray(a,b),rate,16000)});
+      const clip=all.slice(a,b);
+      finish({speech:true,audio:resample(clip,rate,16000),clip,rate});
     };
     if(wantStop) end();
   }).catch(e=>finish({error:e&&e.name==='NotAllowedError'?'not-allowed':'start'}));
@@ -650,12 +552,6 @@ function recordVoice(onLevel){
   activeRecord=api;
   result.then(()=>{if(activeRecord===api) activeRecord=null;});
   return api;
-}
-function resample(x,from,to){
-  if(from===to) return new Float32Array(x);
-  const n=Math.round(x.length*to/from), y=new Float32Array(n), k=from/to;
-  for(let i=0;i<n;i++){const p=i*k, j=Math.floor(p), f=p-j; y[i]=(x[j]||0)*(1-f)+(x[j+1]||0)*f;}
-  return y;
 }
 function stopRecording(){if(activeRecord){activeRecord.cancel(); activeRecord=null;}}
 /* Prüfen, ob das erwartete Wort gesagt wurde. Whisper rät bei einzelnen Wörtern oft falsch («cow» → «Now»),
@@ -693,14 +589,6 @@ async function checkSpoken(m,audio,target,pool,sentence){
   for(const x of rivals){ if(!ok) break; if(await score(asWritten(x))>st) ok=false; }
   return {alts:[g],ok};
 }
-function editDist(a,b){
-  const d=Array.from({length:b.length+1},(_,j)=>j);
-  for(let i=1;i<=a.length;i++){
-    let prev=d[0]; d[0]=i;
-    for(let j=1;j<=b.length;j++){const t=d[j]; d[j]=Math.min(d[j]+1,d[j-1]+1,prev+(a[i-1]===b[j-1]?0:1)); prev=t;}
-  }
-  return d[b.length];
-}
 
 /* Aufnehmen und prüfen. onState('listen'|'think') für die Anzeige. Liefert {alts, ok} oder {error}. */
 function hearLocal(onState,onLevel,target,pool,sentence){
@@ -711,29 +599,33 @@ function hearLocal(onState,onLevel,target,pool,sentence){
     if(r.error) return {error:r.error};
     if(!r.speech) return {error:'no-speech'};
     onState('think');
-    return checkSpoken(await loadASR(),r.audio,target,pool,sentence);
+    const res=await checkSpoken(await loadASR(),r.audio,target,pool,sentence);
+    return Object.assign(res,{clip:r.clip,rate:r.rate});
   }).catch(e=>({error:'asr',detail:String(e&&e.message||e)}));
+  // Aufnahme ohne Sprache oder bei Fehlern trotzdem anhörbar machen
+
   return {result, stop:rec.stop};
 }
 
-const SOUNDS={one:['won'],two:['to','too'],four:['for'],eight:['ate'],eye:['i','aye'],ear:['year','here'],mum:['mom','mam','mommy'],sun:['son'],grey:['gray'],grandma:['grandmother'],grandpa:['grandfather']};
-function norm(s){
-  return s.toLowerCase().replace(/[’`]/g,"'")
-    .replace(/\b(\d{1,2})(:00| ?o'?clock)/g,"$1 o'clock")
-    .replace(/\b(\d{1,2})\b/g,(m,d)=>(+d>=1&&+d<=20)?NUM_EN[+d-1]:m)
-    .replace(/\bi'm\b/g,'i am').replace(/\bit'?s\b/g,'it is').replace(/\bdo not\b/g,"don't")
-    .replace(/[^a-z' ]+/g,' ').replace(/\s+/g,' ').trim();
+const LOCAL_OK=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.WebAssembly&&(window.AudioContext||window.webkitAudioContext));
+let micOpts={v:5,input:LOCAL_OK?'local':'parent'};
+try{
+  const m=JSON.parse(localStorage.getItem(MICKEY)||'null');
+  if(m) micOpts.input=m.input==='parent'||!LOCAL_OK?'parent':'local'; // ältere Einstellungen übernehmen
+}catch(e){}
+function saveMic(){try{localStorage.setItem(MICKEY,JSON.stringify(micOpts))}catch(e){}}
+
+/* «Hör dich selbst»: die letzte Aufnahme abspielen */
+function playClip(c){
+  if(!c||!recCtx) return;
+  try{
+    if(speechOK) speechSynthesis.cancel();
+    recCtx.resume();
+    const b=recCtx.createBuffer(1,c.clip.length,c.rate); b.copyToChannel(c.clip,0);
+    const s=recCtx.createBufferSource(); s.buffer=b; s.connect(recCtx.destination); s.start();
+  }catch(e){}
 }
-function heardOK(target,alts,sentence){
-  const tw=norm(target).split(' '); let best=0;
-  for(const a of alts){
-    const aw=new Set(norm(a).split(' '));
-    const f=tw.filter(w=>aw.has(w)||(SOUNDS[w]||[]).some(x=>aw.has(x))).length/tw.length;
-    best=Math.max(best,f);
-  }
-  return sentence?best>=0.75:best===1;
-}
-let micFails=0; // Fehlversuche des App-Mikrofons in dieser Sitzung
+
 function speakMode(id){
   const t=T(id); const sent=t.kind==='sentences';
   const rounds=shuffle(t.items).slice(0,Math.min(sent?6:8,t.items.length));
@@ -743,41 +635,27 @@ function speakMode(id){
       const n=rounds.length;
       return endScreen(id,got===n?'Perfekt gesprochen!':'Super gesprochen!',`Du hast ${got} von ${n} ${sent?'Sätzen':'Wörtern'} gesagt und ${got} Sterne gesammelt.`,'speak:'+id);
     }
-    const it=rounds[r]; let tries=0, done=false, busy=false;
-    const mode=micOpts.input==='keyboard'?'keyboard':micOpts.input==='local'&&LOCAL_OK&&!micBlocked?'local'
-      :micOpts.input==='mic'&&SR&&!micBlocked?'mic':'parent';
-    const reason=mode!=='parent'?'':micOpts.input==='parent'?'Ein Erwachsener hört zu (eingestellt unter «Für Eltern»).':micReason;
-    const ctrl={
-      mic:'<button class="btn mic sun" id="mic" aria-label="Jetzt sprechen">🎤</button>',
-      local:'<button class="btn mic sun" id="lmic" aria-label="Jetzt sprechen">🎤</button>',
-      keyboard:'',
-      parent:'<button class="btn sun said" id="said">Ich hab\'s gesagt</button>'
-    }[mode];
-    const hintText={
-      mic:'Hör zu, dann tipp aufs Mikrofon und sprich nach.',
-      local:'Hör zu, dann tipp aufs Mikrofon und sprich nach.',
-      keyboard:'Tipp ins Feld, dann unten auf der Tastatur aufs 🎤 und sprich nach.',
-      parent:'Hör zu und sprich laut nach. Dann tipp auf «Ich hab\'s gesagt».'
-    }[mode];
+    const it=rounds[r]; let tries=0, done=false, busy=false, clip=null;
+    const mode=micOpts.input==='local'&&LOCAL_OK&&!micBlocked?'local':'parent';
+    const reason=mode==='local'?'':micBlocked?micReason:micOpts.input==='parent'?'Ein Erwachsener hört zu (eingestellt unter «Für Eltern»).':'Dieses Gerät kann keine Aufnahme machen. Deshalb hört ein Erwachsener zu.';
     app.innerHTML=`${topbar('theme:'+id,'Sprechen')}
     ${dots(rounds.length,r)}
     <div class="stage static">${vis(it,'lg')}<span class="word${it.s?' sent':''}">${it.en}</span><span class="de">auf Deutsch: ${it.de}</span></div>
-    <div class="ctrl"><button class="btn round" id="hear" aria-label="Anhören">🔊</button>${ctrl}</div>
-    ${mode==='keyboard'?`<div class="dict"><input id="dict" type="text" lang="en" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="Hier tippen, dann 🎤" aria-label="Hier hineinsprechen"><button class="btn sun" id="dok">Fertig</button></div>
-    <p class="hint small">Die Tastatur muss auf Englisch stehen: Weltkugel 🌐 gedrückt halten und Englisch wählen.</p>`:''}
+    <div class="ctrl"><button class="btn round" id="hear" aria-label="Vorlage anhören">🔊</button>
+    ${mode==='local'?'<button class="btn mic sun" id="lmic" aria-label="Jetzt sprechen">🎤</button><button class="btn round" id="me" hidden aria-label="Meine Aufnahme anhören">🎧</button>'
+      :'<button class="btn sun said" id="said">Ich hab\'s gesagt</button>'}</div>
     <div class="check" id="check" hidden><p>Eltern-Check: Hat es richtig geklungen?</p><div class="ctrl"><button class="btn sun" id="yes">Ja, richtig ✓</button><button class="btn" id="again2">Nochmal üben</button></div></div>
-    <p class="hint" id="hint">${hintText}</p>
+    <p class="hint" id="hint">${mode==='local'?'Hör zu, dann tipp aufs Mikrofon und sprich nach.':'Hör zu und sprich laut nach. Dann tipp auf «Ich hab\'s gesagt».'}</p>
     ${reason?`<p class="hint small">${reason}</p>`:''}
     <p class="fb" aria-live="polite"></p>
-    <button class="btn small kb" id="tokb" hidden>Mit der Tastatur-Diktierfunktion sprechen</button>
     <button class="btn small skip" id="skip">Überspringen</button>`;
-    const fb=app.querySelector('.fb'), hint=document.getElementById('hint'), skip=document.getElementById('skip'), tokb=document.getElementById('tokb');
+    const fb=app.querySelector('.fb'), hint=document.getElementById('hint'), skip=document.getElementById('skip');
     if(note) fb.textContent=note;
-    const next=()=>{stopListening(); r++; round();};
+    const next=()=>{stopRecording(); r++; round();};
     const success=el=>{
-      done=true; got++; micFails=0; grade(id,it.en,true); addStars(1); starFly(el); pop(el);
+      done=true; got++; grade(id,it.en,true); addStars(1); starFly(el); pop(el);
       fb.textContent=pick(PRAISE)+' Das hast du toll gesagt!';
-      setTimeout(next,1900);
+      setTimeout(next,clip?2600:1900);
     };
     const wrong=heard=>{
       tries++;
@@ -787,7 +665,6 @@ function speakMode(id){
     };
     document.getElementById('hear').onclick=()=>speak(it.en);
     skip.onclick=()=>{if(done) return; if(tries) grade(id,it.en,false); next();};
-    tokb.onclick=()=>{micOpts.input='keyboard'; saveMic(); round('Neu: Sprich über die Tastatur. Tipp ins Feld und dann aufs 🎤.');};
 
     // Eltern-Check
     const said=document.getElementById('said'), check=document.getElementById('check');
@@ -797,29 +674,17 @@ function speakMode(id){
       document.getElementById('again2').onclick=()=>{check.hidden=true; said.hidden=false; fb.textContent='Hör nochmal genau zu und sprich es nach.'; speak(it.en);};
     }
 
-    // Diktat über die Tastatur
-    const dict=document.getElementById('dict');
-    if(dict){
-      const dok=document.getElementById('dok');
-      dict.oninput=()=>{if(!done&&dict.value.trim()&&heardOK(it.en,[dict.value],sent)){dict.blur(); success(dok);}};
-      const finish=()=>{
-        if(done) return;
-        const v=dict.value.trim();
-        if(!v){fb.textContent='Tipp zuerst ins Feld und dann unten auf der Tastatur aufs 🎤.'; dict.focus(); return;}
-        if(heardOK(it.en,[v],sent)){dict.blur(); success(dok);}
-        else{dict.value=''; wrong(v);}
-      };
-      dok.onclick=finish;
-      dict.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault(); finish();}};
-    }
-
-    // Erkennung auf dem Gerät
-    const lmic=document.getElementById('lmic');
+    // Die App hört zu (Erkennung auf dem Gerät)
+    const lmic=document.getElementById('lmic'), me=document.getElementById('me');
     if(lmic){
-      const ready=()=>{if(document.body.contains(lmic)&&!busy){lmic.disabled=false; hint.textContent='Hör zu, dann tipp aufs Mikrofon und sprich nach.';}};
+      me.onclick=()=>playClip(clip);
       if(asrProgress<1){
         lmic.disabled=true;
-        const show=v=>{if(!document.body.contains(lmic)){asrWatch.delete(show); return;} if(v<1) hint.textContent=`Die Spracherkennung wird vorbereitet … ${Math.round(v*100)} %`; else{asrWatch.delete(show); ready();}};
+        const show=v=>{
+          if(!document.body.contains(lmic)){asrWatch.delete(show); return;}
+          if(v<1) hint.textContent=`Die Spracherkennung wird vorbereitet … ${Math.round(v*100)} %`;
+          else{asrWatch.delete(show); if(!busy){lmic.disabled=false; hint.textContent='Hör zu, dann tipp aufs Mikrofon und sprich nach.';}}
+        };
         asrWatch.add(show); show(asrProgress);
         loadASR().catch(()=>{
           asrWatch.delete(show);
@@ -842,13 +707,10 @@ function speakMode(id){
         cur.result.then(res=>{
           busy=false; cur=null; lmic.classList.remove('live','think'); lmic.style.removeProperty('--lvl');
           if(!res||done||!document.body.contains(lmic)) return;
-          hint.textContent='Tipp aufs Mikrofon und sprich nach.';
+          if(res.clip){clip=res; me.hidden=false;}
+          hint.textContent=clip?'Tipp auf 🎧, um dich selbst zu hören.':'Tipp aufs Mikrofon und sprich nach.';
           if(res.error){
-            if(res.error==='not-allowed'){
-              micBlocked=true;
-              micReason='Das Mikrofon ist nicht freigegeben (Einstellungen → Safari → Mikrofon). Deshalb hört ein Erwachsener zu.';
-              return round('Das Mikrofon ist nicht freigegeben. Sprich einfach laut nach.');
-            }
+            if(res.error==='not-allowed'){micBlocked=true; micReason=SR_HINT; return round('Das Mikrofon ist nicht freigegeben. Sprich einfach laut nach.');}
             fb.textContent=res.error==='no-speech'?'Ich habe nichts gehört. Sprich etwas lauter.'
               :res.error==='asr'?'Die Spracherkennung konnte nicht geladen werden. Ist Internet da? Probier es nochmal.'
               :'Das Mikrofon hat nicht geklappt. Probier es nochmal.';
@@ -859,40 +721,6 @@ function speakMode(id){
         });
       };
     }
-
-    // App-Mikrofon (Safari-Spracherkennung)
-    const mic=document.getElementById('mic');
-    let listening=null;
-    if(mic) mic.onclick=()=>{
-      if(done) return;
-      if(busy){ if(listening) listening.stop(); hint.textContent='Einen Moment …'; return; }
-      busy=true;
-      mic.classList.add('live'); mic.setAttribute('aria-label','Fertig gesprochen');
-      hint.textContent='Ich höre zu … Wenn du fertig bist, tipp nochmal aufs Mikrofon.'; fb.textContent='';
-      listening=listen(res=>{
-        busy=false; listening=null; mic.classList.remove('live'); mic.setAttribute('aria-label','Jetzt sprechen');
-        if(done||!document.body.contains(mic)) return;
-        hint.textContent='Tipp aufs Mikrofon und sprich nach.';
-        if(res.error){
-          if(['not-allowed','service-not-allowed','audio-capture'].includes(res.error)){
-            micBlocked=true;
-            micReason='Das Mikrofon ist hier nicht freigegeben. Deshalb hört ein Erwachsener zu.';
-            return round('Das Mikrofon ist nicht freigegeben. Sprich einfach laut nach.');
-          }
-          if(res.error==='lang'){fb.textContent='Ich habe die Sprache umgestellt. Tipp bitte nochmal aufs Mikrofon.'; return;}
-          micFails++;
-          fb.textContent=res.error==='service'?'Die Spracherkennung hat sofort abgebrochen. '+SERVICE_HINT
-            :res.error==='stuck'?'Das Mikrofon hat nicht reagiert. Tipp nochmal aufs Mikrofon.'
-            :res.error==='no-speech'?'Ich habe nichts gehört. Sprich etwas lauter.'
-            :`Das hat nicht geklappt (${res.error}). Probier es nochmal.`;
-          if(micFails>=1){tokb.hidden=false; tokb.classList.add('sun');}
-          return;
-        }
-        micFails=0;
-        if(heardOK(it.en,res.alts,sent)) success(mic);
-        else wrong(res.alts[0]);
-      },alts=>heardOK(it.en,alts,sent));
-    };
     setTimeout(()=>speak(it.en),300);
   }
   round();
@@ -945,7 +773,6 @@ function go(route){
   stopRecording();
   const [s,id,arg]=route.split(':');
   if(speechOK) speechSynthesis.cancel();
-  stopListening();
   window.scrollTo(0,0);
   if(s==='home') home();
   else if(s==='practice') practice();
@@ -956,6 +783,8 @@ function go(route){
   else if(s==='memory') memory(id);
   else if(s==='build') build(id);
   else if(s==='speak') speakMode(id);
+  else if(s==='ttest') themeTest(id);
+  else if(s==='ltest') levelTest(id);
 }
 app.addEventListener('click',e=>{const b=e.target.closest('[data-go]'); if(b) go(b.dataset.go);});
 home();

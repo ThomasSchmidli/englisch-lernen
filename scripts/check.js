@@ -4,8 +4,8 @@ const root=path.join(__dirname,'..');
 const errors=[], err=m=>errors.push(m);
 
 const ctx={}; vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8')+'\nthis.THEMES=THEMES;',ctx);
-const THEMES=ctx.THEMES;
+vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8')+'\nthis.THEMES=THEMES; this.LEVELS=LEVELS;',ctx);
+const THEMES=ctx.THEMES, LEVELS=ctx.LEVELS;
 
 const ids=new Set();
 for(const t of THEMES){
@@ -13,6 +13,7 @@ for(const t of THEMES){
   if(!t.id||ids.has(t.id)) err(`${where}: id fehlt oder ist doppelt`); ids.add(t.id);
   if(!['words','sentences'].includes(t.kind)) err(`${where}: kind muss 'words' oder 'sentences' sein`);
   for(const k of ['name','icon','color']) if(!t[k]) err(`${where}: ${k} fehlt`);
+  if(!LEVELS.some(l=>l.n===t.level)) err(`${where}: level fehlt oder ist unbekannt`);
   if(!Array.isArray(t.items)||t.items.length<6){err(`${where}: braucht mindestens 6 Einträge (Memory)`); continue;}
   const ens=new Set(), looks=new Set();
   for(const it of t.items){

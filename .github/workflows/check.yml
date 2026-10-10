@@ -14,3 +14,5 @@ jobs:
         run: for f in js/*.js sw.js scripts/*.js; do node --check "$f"; done
       - name: Inhalte und Offline-Dateien
         run: node scripts/check.js
+      - name: Tests der Logik
+        run: node scripts/test.js

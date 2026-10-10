@@ -1,7 +1,8 @@
 # Englisch lernen
 
 Kleine Lern-App für Kinder, die mit Englisch beginnen: Wörter und einfache Sätze
-mit Bildern, Sprachausgabe, Hör-Quiz, Memory, Satz bauen und Sprechübungen.
+in 4 Levels mit Bildern, Sprachausgabe, Hör-Quiz, Memory, Satz bauen und Sprechübungen
+(mit «Hör dich selbst»). Tests pro Thema und pro Level vergeben Medaillen.
 «Heute üben» mischt fällige Wiederholungen aus allen Themen (1, 2, 4, 7, 14 Tage)
 mit neuen Wörtern und zählt die Tage hintereinander.
 
@@ -9,7 +10,8 @@ Die App lässt sich auf Tablet und Handy installieren (Safari: «Teilen» → «
 Home-Bildschirm») und läuft danach auch ohne Internet.
 
 Reine statische Webseite ohne Build-Schritt: `index.html`, `css/style.css`,
-`js/data.js` (Inhalte), `js/app.js` (Logik), `sw.js` (Offline) und
+`js/data.js` (Inhalte), `js/logic.js` (reine Logik), `js/app.js` (Anzeige und Ablauf),
+`sw.js` (Offline) und
 `manifest.webmanifest` mit den Icons in `icons/`.
 
 ## Veröffentlichen mit GitHub Pages
@@ -32,12 +34,12 @@ und dann http://localhost:8000 öffnen. Die Spracherkennung braucht https oder l
 
 ## Hinweise
 
-- Prüfen: `node scripts/check.js` kontrolliert Inhalte und Offline-Dateiliste
-  (läuft bei jedem Push automatisch als GitHub Action).
-- Sicherung: Startseite → «Für Eltern» → als Datei speichern oder Code kopieren.
-
+- Prüfen: `node scripts/check.js` kontrolliert Inhalte und Offline-Dateiliste,
+  `node scripts/test.js` testet die Logik (beides läuft bei jedem Push als GitHub Action).
+- Für Eltern (unten auf der Startseite): Übersicht mit Fortschritt und schwierigen Wörtern,
+  Spielstand als Datei oder Code sichern, Sprechen einstellen und testen.
 - Spielstand: wird im Browser gespeichert (localStorage, Schlüssel `englisch-lernen-v1`).
   Den Schlüssel nicht ändern, sonst beginnt der Spielstand bei null.
 - Sprechübungen: Die Aufnahme wird direkt auf dem Gerät erkannt (Whisper, Transformers.js).
   Beim ersten Mal wird das Modell (ca. 41 MB) von huggingface.co geladen, danach klappt es offline.
-  Im Eltern-Bereich lässt sich stattdessen Safari-Erkennung, Tastatur-Diktat oder Eltern-Check wählen.
+  Im Eltern-Bereich lässt sich stattdessen der Eltern-Check wählen.
