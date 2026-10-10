@@ -8,12 +8,14 @@ const today=()=>fmt(new Date());
 function addDays(s,n){const [y,m,d]=s.split('-').map(Number); return fmt(new Date(y,m-1,d+n));}
 
 /* Spielstand: stars, known (gelernt pro Thema), srs (Wiederholung pro Eintrag), streak (Tage hintereinander),
-   bonus (Datum der letzten Extra-Sterne), tests (bestes Ergebnis pro Test, z. B. 'theme:animals' oder 'level:1') */
-const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:'',tests:{}});
+   bonus (Datum der letzten Extra-Sterne), tests (bestes Ergebnis pro Test, z. B. 'theme:animals' oder 'level:1'),
+   stickers (freigeschaltete Sticker-Emojis), earned (alle je verdienten Sterne; stars ist das, was noch übrig ist) */
+const fresh=()=>({stars:0,known:{},srs:{},streak:{n:0,last:''},bonus:'',tests:{},stickers:[],earned:0});
 /* Gespeicherte Daten (auch ältere Formate und Sicherungen) in die aktuelle Form bringen */
 function normalize(d,day=today()){
   if(!d||typeof d!=='object'||typeof d.stars!=='number'||typeof (d.known||{})!=='object') return null;
-  const x={stars:d.stars||0,known:d.known||{},srs:d.srs||{},streak:d.streak||{n:0,last:''},bonus:d.bonus||'',tests:d.tests||{}};
+  const x={stars:d.stars||0,known:d.known||{},srs:d.srs||{},streak:d.streak||{n:0,last:''},bonus:d.bonus||'',tests:d.tests||{},
+    stickers:Array.isArray(d.stickers)?d.stickers:[],earned:typeof d.earned==='number'?d.earned:d.stars||0};
   // Übernahme aus v1 ohne Wiederholung: Gelerntes kommt heute zum ersten Mal wieder
   for(const tid in x.known) for(const en of x.known[tid]){const k=tid+'|'+en; if(!x.srs[k]) x.srs[k]={l:1,d:day};}
   return x;
@@ -79,4 +81,16 @@ function testResult(got,n,prevBest=0){
   const pct=n?Math.round(got/n*100):0, medal=medalFor(pct), prev=medalFor(prevBest);
   const bonus=medal&&(!prev||medal.stars>prev.stars)?medal.stars-(prev?prev.stars:0):0;
   return {pct,medal,passed:pct>=75,best:Math.max(pct,prevBest),bonus};
+}
+
+/* Sticker: mit Sternen kaufen (verändert d); false, wenn schon vorhanden oder zu wenig Sterne */
+function buySticker(d,emo,cost){
+  if(d.stickers.includes(emo)||d.stars<cost) return false;
+  d.stars-=cost; d.stickers.push(emo); return true;
+}
+/* Spezial-Sticker für einen bestandenen Level-Test; liefert das neue Emoji oder null */
+function levelReward(d,level,passed,rewards){
+  const r=rewards[level];
+  if(!passed||!r||d.stickers.includes(r[0])) return null;
+  d.stickers.push(r[0]); return r[0];
 }

@@ -1,7 +1,7 @@
 /* Anzeige und Ablauf der App: Navigation, Spiele, Tests, Sprachausgabe, Aufnahme, Spielstand.
    Reine Logik (Datum, Wiederholung, Sprachvergleich, Auswertung) liegt in js/logic.js. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='10';
+const VERSION='11';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 /* Spielstand im Browser (Schlüssel nicht ändern, sonst beginnt der Spielstand bei null) */
@@ -22,7 +22,7 @@ function grade(tid,en,ok){
 function markDay(){data.streak=nextStreak(data.streak,today()); save();}
 const streakNow=()=>streakValue(data.streak,today());
 function knownCount(t){const k=data.known[t.id]||[]; return t.items.filter(i=>k.includes(i.en)).length;}
-function addStars(n){data.stars+=n; save(); document.querySelectorAll('.stars').forEach(s=>{s.textContent='⭐ '+data.stars; s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop');});}
+function addStars(n){data.stars+=n; data.earned+=n; save(); document.querySelectorAll('.stars').forEach(s=>{s.textContent='⭐ '+data.stars; s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop');});}
 
 /* Vorlesen */
 const speechOK='speechSynthesis' in window;
@@ -92,6 +92,40 @@ function levelTestTile(l){
   </button>`;
 }
 
+/* Sticker-Album */
+const ALL_STICKERS=STICKER_PACKS.flatMap(p=>p.items.map(([e,name])=>({e,name,cost:p.cost})));
+function albumTile(){
+  const have=data.stickers.length, total=ALL_STICKERS.length+Object.keys(LEVEL_STICKERS).length;
+  const next=ALL_STICKERS.filter(x=>!data.stickers.includes(x.e)).sort((a,b)=>a.cost-b.cost)[0];
+  const meta=next?(data.stars>=next.cost?'Du kannst einen neuen Sticker aussuchen! 🎉':`Noch ${next.cost-data.stars} ⭐ bis zum nächsten Sticker`):'Alle Sticker gesammelt!';
+  return `<button class="btn tile album" data-go="album">
+    <span class="icon" style="background:var(--berry)">📒</span>
+    <span class="tx"><span class="name">Sticker-Album <span class="small">${have} von ${total}</span></span><span class="meta">${meta}</span></span>
+  </button>`;
+}
+function album(msg){
+  const own=e=>data.stickers.includes(e);
+  const cell=(e,name,lock)=>own(e)
+    ?`<div class="stk own" title="${name}"><span class="se">${e}</span><span class="sn">${name}</span></div>`
+    :lock;
+  app.innerHTML=`${topbar('home','Sticker-Album')}
+  <p class="lead small">Für Sterne bekommst du Sticker. Such dir einen aus!</p>
+  ${msg?`<p class="newstk" role="status">${msg}</p>`:''}
+  ${STICKER_PACKS.map(p=>`<h3 class="sec">${p.name} <span class="sub">je ${p.cost} ⭐</span></h3>
+  <div class="stks">${p.items.map(([e,name])=>cell(e,name,`<button class="stk lock${data.stars>=p.cost?' can':''}" data-buy="${e}" data-cost="${p.cost}" aria-label="${name} für ${p.cost} Sterne freischalten"><span class="se">?</span><span class="sn">${p.cost} ⭐</span></button>`)).join('')}</div>`).join('')}
+  <h3 class="sec">Spezial-Sticker <span class="sub">für bestandene Level-Tests</span></h3>
+  <div class="stks">${LEVELS.map(l=>{const [e,name]=LEVEL_STICKERS[l.n]; return cell(e,name,`<button class="stk lock" data-go="ltest:${l.n}" aria-label="Test ${l.name} bestehen"><span class="se">🔒</span><span class="sn">Test ${l.name}</span></button>`);}).join('')}</div>`;
+  let armed=null;
+  app.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>{
+    const e=b.dataset.buy, cost=+b.dataset.cost, st=ALL_STICKERS.find(x=>x.e===e);
+    if(data.stars<cost){b.querySelector('.sn').textContent=`noch ${cost-data.stars} ⭐`; nope(b); return;}
+    if(armed!==b){
+      if(armed) armed.querySelector('.sn').textContent=armed.dataset.cost+' ⭐';
+      armed=b; b.querySelector('.sn').textContent='Nochmal tippen!'; pop(b); return;
+    }
+    if(buySticker(data,e,cost)){save(); album(`Neuer Sticker: ${e} ${st.name}!`);}
+  });
+}
 function home(){
   const p=practiceInfo(), n=streakNow(), doneToday=data.streak.last===today();
   const pmeta=doneToday?'Heute schon geübt ✓ Du kannst gern nochmal.'
@@ -107,6 +141,7 @@ function home(){
     <span class="icon" style="background:var(--sun)">⭐</span>
     <span class="tx"><span class="name">Heute üben</span><span class="meta">${pmeta}</span></span>
   </button>
+  ${albumTile()}
   ${LEVELS.map(l=>`<h3 class="sec">${l.icon} ${l.name} <span class="sub">${l.sub}</span></h3>
   <div class="list two">${levelThemes(l.n).map(tileHTML).join('')}${levelTestTile(l)}</div>`).join('')}
   ${speechOK?'':'<p class="note">Dieses Gerät kann leider nichts vorlesen. Öffne die App am besten in Safari oder Chrome.</p>'}
@@ -124,7 +159,8 @@ function overviewHTML(){
     return it?`<li><b>${en}</b> – ${it.de} <span class="small">(${s.w}× falsch, Stufe ${s.l} von 5)</span></li>`:'';
   }).join('');
   return `<h3>Übersicht</h3>
-    <p class="small">${all.length} Wörter und Sätze angefangen, ${strong} sitzen schon gut (Stufe 4–5), ${due} sind heute zum Wiederholen dran.</p>
+    <p class="small">${all.length} Wörter und Sätze angefangen, ${strong} sitzen schon gut (Stufe 4–5), ${due} sind heute zum Wiederholen dran.
+    Insgesamt ${data.earned} Sterne verdient, ${data.stickers.length} Sticker gesammelt.</p>
     <div class="ov">${LEVELS.map(l=>`<div class="ovl"><p class="ovh">${l.icon} ${l.name} ${medalBadge('level:'+l.n)}${bestOf('level:'+l.n)?` <span class="small">Test ${bestOf('level:'+l.n)} %</span>`:''}</p>
       ${levelThemes(l.n).map(t=>{const k=knownCount(t), n=t.items.length, b=bestOf('theme:'+t.id);
         return `<div class="ovr"><span>${t.icon} ${t.name}</span><span class="bar"><span style="width:${Math.round(k/n*100)}%;background:${t.color}"></span></span><span class="small">${k}/${n}${b?` · ${medalBadge('theme:'+t.id)} ${b} %`:''}</span></div>`;}).join('')}</div>`).join('')}</div>
@@ -459,6 +495,7 @@ function runTest(key,title,back,themes,n){
 function testEnd(key,title,back,got,n){
   const prev=bestOf(key), res=testResult(got,n,prev);
   data.tests[key]={best:res.best,last:res.pct,date:today()};
+  const reward=key.startsWith('level:')?levelReward(data,+key.slice(6),res.passed,LEVEL_STICKERS):null;
   if(res.bonus) addStars(res.bonus); else save();
   markDay();
   const big=res.pct===100?'Alles richtig!':res.passed?'Bestanden!':res.pct>=50?'Gut gemacht!':'Weiter üben!';
@@ -466,8 +503,10 @@ function testEnd(key,title,back,got,n){
   app.innerHTML=`${topbar(back,'')}
   <div class="end"><div class="trophy">${res.medal?res.medal.icon:'💪'}</div><h2>${big}</h2>
   <p>${title}: ${got} von ${n} richtig (${res.pct} %).${res.medal?` Das ist ${res.medal.name}!`:' Ab 50 % gibt es eine Medaille.'}${improved}${res.bonus?` Dafür gibt es ${res.bonus===1?'einen Extra-Stern':res.bonus+' Extra-Sterne'}.`:''}</p>
+  ${reward?`<p class="newstk">Neuer Spezial-Sticker: <span class="big">${reward}</span> ${LEVEL_STICKERS[key.slice(6)][1]}!</p>`:''}
   <div class="col"><button class="btn sun" data-go="${key.startsWith('level:')?'ltest:'+key.slice(6):'ttest:'+key.slice(6)}">Test nochmal machen</button>
   ${res.passed?'':'<button class="btn" data-go="practice">Mit «Heute üben» trainieren</button>'}
+  ${reward?'<button class="btn" data-go="album">Zum Sticker-Album</button>':''}
   <button class="btn" data-go="${back}">Zurück</button></div></div>`;
 }
 function themeTest(id){const t=T(id); runTest('theme:'+id,'Test: '+t.name,'theme:'+id,[t],Math.min(10,t.items.length));}
@@ -777,6 +816,7 @@ function go(route){
   if(s==='home') home();
   else if(s==='practice') practice();
   else if(s==='parents') parents();
+  else if(s==='album') album();
   else if(s==='theme') theme(id);
   else if(s==='explore') explore(id,+(arg||0));
   else if(s==='quiz') quiz(id);

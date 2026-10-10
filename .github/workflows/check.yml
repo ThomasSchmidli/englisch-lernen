@@ -11,8 +11,26 @@ jobs:
         with:
           node-version: 20
       - name: Syntax
-        run: for f in js/*.js sw.js scripts/*.js; do node --check "$f"; done
+        run: for f in js/*.js sw.js scripts/*.js tests/*.js; do node --check "$f"; done
       - name: Inhalte und Offline-Dateien
         run: node scripts/check.js
       - name: Tests der Logik
         run: node scripts/test.js
+  bedienung:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Playwright installieren
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Bedienungs-Tests
+        run: npx playwright test
+      - name: Bericht bei Fehlern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-ergebnisse
+          path: test-results/
+          retention-days: 7

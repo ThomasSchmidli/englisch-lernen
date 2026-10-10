@@ -4,7 +4,7 @@ const root=path.join(__dirname,'..');
 const ctx={}; vm.createContext(ctx);
 for(const f of ['js/data.js','js/logic.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx,{filename:f});
 const run=code=>vm.runInContext(code,ctx);
-const L=run('({THEMES,LEVELS,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
+const L=run('({THEMES,LEVELS,STICKER_PACKS,LEVEL_STICKERS,buySticker,levelReward,norm,heardOK,editDist,resample,addDays,normalize,fresh,review,nextStreak,streakValue,medalFor,testResult})');
 
 let failed=0, passed=0;
 // Objekte aus dem vm-Kontext haben andere Prototypen: als JSON vergleichen
@@ -78,7 +78,7 @@ test('Spielstand aus Version 1 wird übernommen',()=>{
 test('ungültige Sicherungen werden abgelehnt',()=>{
   for(const bad of [null,'x',{},{stars:'5'},{foo:1}]) assert.strictEqual(L.normalize(bad),null);
 });
-test('neuer Spielstand hat alle Felder',()=>assert.deepStrictEqual(Object.keys(L.fresh()).sort(),['bonus','known','srs','stars','streak','tests']));
+test('neuer Spielstand hat alle Felder',()=>assert.deepStrictEqual(Object.keys(L.fresh()).sort(),['bonus','earned','known','srs','stars','stickers','streak','tests']));
 
 /* Tests und Medaillen */
 test('Medaillen',()=>{
@@ -97,6 +97,31 @@ test('Extra-Sterne nur für eine bessere Medaille',()=>{
   assert.strictEqual(L.testResult(10,12,90).bonus,0);  // schlechter als bisher
   assert.strictEqual(L.testResult(10,12,0).best,83);
   assert.strictEqual(L.testResult(5,12,90).best,90);
+});
+
+/* Sticker */
+test('alter Spielstand: keine Sticker, verdiente Sterne = vorhandene',()=>{
+  const x=L.normalize({stars:12,known:{}});
+  eq(x.stickers,[]); assert.strictEqual(x.earned,12);
+});
+test('Sticker kaufen: Sterne werden abgezogen, nur einmal, nicht ohne genug Sterne',()=>{
+  const d=L.fresh(); d.stars=12;
+  assert.ok(L.buySticker(d,'🦊',5)); assert.strictEqual(d.stars,7);
+  assert.ok(!L.buySticker(d,'🦊',5)); assert.strictEqual(d.stars,7);
+  assert.ok(!L.buySticker(d,'🐉',8)); assert.strictEqual(d.stars,7);
+  eq(d.stickers,['🦊']);
+});
+test('Spezial-Sticker nur für bestandene Level-Tests und nur einmal',()=>{
+  const d=L.fresh();
+  assert.strictEqual(L.levelReward(d,1,false,L.LEVEL_STICKERS),null);
+  assert.strictEqual(L.levelReward(d,1,true,L.LEVEL_STICKERS),'🦄');
+  assert.strictEqual(L.levelReward(d,1,true,L.LEVEL_STICKERS),null);
+  eq(d.stickers,['🦄']);
+});
+test('Sticker sind eindeutig und jedes Level hat einen Spezial-Sticker',()=>{
+  const all=[...L.STICKER_PACKS.flatMap(p=>p.items.map(i=>i[0])),...Object.values(L.LEVEL_STICKERS).map(x=>x[0])];
+  assert.strictEqual(new Set(all).size,all.length,'doppelter Sticker');
+  for(const l of L.LEVELS) assert.ok(L.LEVEL_STICKERS[l.n],`Level ${l.n} ohne Spezial-Sticker`);
 });
 
 /* Inhalte passen zu den Levels */

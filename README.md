@@ -2,7 +2,8 @@
 
 Kleine Lern-App für Kinder, die mit Englisch beginnen: Wörter und einfache Sätze
 in 4 Levels mit Bildern, Sprachausgabe, Hör-Quiz, Memory, Satz bauen und Sprechübungen
-(mit «Hör dich selbst»). Tests pro Thema und pro Level vergeben Medaillen.
+(mit «Hör dich selbst»). Tests pro Thema und pro Level vergeben Medaillen,
+mit Sternen lassen sich Sticker fürs Album freischalten.
 «Heute üben» mischt fällige Wiederholungen aus allen Themen (1, 2, 4, 7, 14 Tage)
 mit neuen Wörtern und zählt die Tage hintereinander.
 
@@ -28,14 +29,15 @@ damit bleibt auch der Spielstand auf dem Gerät erhalten.
 ## Lokal testen
 
 ```
-python3 -m http.server 8000
+node scripts/serve.js
 ```
 und dann http://localhost:8000 öffnen. Die Spracherkennung braucht https oder localhost.
 
 ## Hinweise
 
 - Prüfen: `node scripts/check.js` kontrolliert Inhalte und Offline-Dateiliste,
-  `node scripts/test.js` testet die Logik (beides läuft bei jedem Push als GitHub Action).
+  `node scripts/test.js` testet die Logik, `npx playwright test` klickt die Bedienung durch
+  (vorher einmal `npm install` und `npx playwright install chromium`). Alles läuft bei jedem Push als GitHub Action.
 - Für Eltern (unten auf der Startseite): Übersicht mit Fortschritt und schwierigen Wörtern,
   Spielstand als Datei oder Code sichern, Sprechen einstellen und testen.
 - Spielstand: wird im Browser gespeichert (localStorage, Schlüssel `englisch-lernen-v1`).

@@ -1,0 +1,13 @@
+{
+  "name": "englisch-lernen",
+  "private": true,
+  "description": "Nur für die Entwicklung: Tests. Die App selbst braucht keine Pakete und keinen Build-Schritt.",
+  "scripts": {
+    "check": "node scripts/check.js",
+    "test": "node scripts/test.js",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
