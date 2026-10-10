@@ -1,6 +1,6 @@
 /* Logik der App: Navigation, Spiele, Sprachausgabe, Spracherkennung, Spielstand. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='4';
+const VERSION='5';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 const KEY='englisch-lernen-v1';
@@ -129,18 +129,28 @@ function home(){
 /* Für Eltern: Rohdaten der Spracherkennung anzeigen, um Probleme auf einem Gerät zu finden */
 function micTest(){
   const mt=document.getElementById('mt'), ms=document.getElementById('ms'), log=document.getElementById('mlog');
+  const mc=document.getElementById('mcont'), ml=document.getElementById('mlang'), mu=document.getElementById('muse');
+  mc.value=micOpts.cont?'1':'0'; ml.value=micOpts.lang;
   if(!SR){mt.disabled=true; return;}
   let rec=null, t0=0;
+  const chosen=()=>({cont:mc.value==='1',lang:ml.value});
+  const same=()=>chosen().cont===micOpts.cont&&chosen().lang===micOpts.lang;
+  mc.onchange=ml.onchange=()=>{mu.hidden=same(); mu.textContent='Diese Einstellung in der App verwenden';};
+  mu.onclick=()=>{micOpts=chosen(); micBlocked=false; try{localStorage.setItem(MICKEY,JSON.stringify(micOpts))}catch(e){} mu.textContent='Gespeichert ✓';};
   const add=m=>{log.textContent+=`\n${((Date.now()-t0)/1000).toFixed(1)} s  ${m}`; log.scrollTop=log.scrollHeight;};
   const off=()=>{mt.disabled=false; ms.disabled=true;};
   mt.onclick=()=>{
     stopListening(); if(speechOK) speechSynthesis.cancel();
-    log.textContent=`Modus: ${APPLE?'Safari (fortlaufend)':'Standard'}, Sprache en-GB`; t0=Date.now();
+    const o=chosen();
+    log.textContent=`Aufnahme ${o.cont?'fortlaufend':'einzeln'}, Sprache ${o.lang||'wie Gerät'}`; t0=Date.now();
     try{
-      rec=makeRec();
+      rec=makeRec(o);
       ['start','audiostart','soundstart','speechstart','speechend','soundend','audioend','nomatch'].forEach(ev=>rec.addEventListener(ev,()=>add(ev)));
       rec.onresult=e=>{const l=e.results[e.results.length-1]; add(`Ergebnis${l.isFinal?' (fertig)':''}: «${[...l].map(a=>a.transcript).join('» / «')}»`);};
-      rec.onerror=e=>add('Fehler: '+e.error+(e.message?' – '+e.message:''));
+      rec.onerror=e=>{
+        add('Fehler: '+e.error+(e.message?' – '+e.message:''));
+        if(e.error==='aborted'&&Date.now()-t0<1000) add('→ iOS hat sofort abgebrochen. '+SERVICE_HINT);
+      };
       rec.onend=()=>{add('Ende'); off(); rec=null;};
       rec.start(); add('start() aufgerufen'); mt.disabled=true; ms.disabled=false;
       const r=rec; activeListen={cancel:()=>{try{r.abort()}catch(x){}}}; // beim Verlassen der Seite beenden
@@ -168,8 +178,13 @@ function parents(msg){
     <p class="err" id="err" role="alert"></p>
     <h3>Mikrofon testen</h3>
     <p class="small">Zeigt, was die Spracherkennung dieses Geräts meldet. Starten, ein englisches Wort sagen, dann stoppen.</p>
+    <div class="row opts">
+      <label>Aufnahme <select id="mcont"><option value="1">fortlaufend</option><option value="0">einzeln</option></select></label>
+      <label>Sprache <select id="mlang"><option value="en-GB">en-GB</option><option value="en-US">en-US</option><option value="">wie Gerät</option></select></label>
+    </div>
     <div class="row"><button class="btn sun" id="mt">Test starten</button><button class="btn" id="ms" disabled>Stoppen</button></div>
-    <pre class="log" id="mlog">${SR?(APPLE?'Modus: Safari (fortlaufend)':'Modus: Standard'):'Dieser Browser hat keine Spracherkennung.'}</pre>
+    <div class="row"><button class="btn small" id="muse" hidden>Diese Einstellung in der App verwenden</button></div>
+    <pre class="log" id="mlog">${SR?'Bereit.':'Dieser Browser hat keine Spracherkennung.'}</pre>
     <h3>Zurücksetzen</h3>
     <div class="row"><button class="btn" id="reset">Fortschritt löschen</button></div>
     <p class="ver">Version ${VERSION}</p>
@@ -387,10 +402,15 @@ let micBlocked=false, activeListen=null;
 /* Safari (auch Chrome auf iPhone/iPad) beendet die Aufnahme mit continuous=false oft sofort */
 const APPLE=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)
   ||(/Safari/.test(navigator.userAgent)&&!/Chrome|Chromium|Edg|Android/.test(navigator.userAgent));
-function makeRec(){
-  const r=new SR(); r.lang='en-GB'; r.interimResults=true; r.maxAlternatives=5; r.continuous=APPLE;
+/* Einstellungen der Spracherkennung, im Eltern-Bereich testbar (pro Gerät, eigener Schlüssel) */
+const MICKEY='englisch-lernen-mic';
+let micOpts={cont:APPLE,lang:'en-GB'};
+try{const m=JSON.parse(localStorage.getItem(MICKEY)||'null'); if(m) micOpts={cont:!!m.cont,lang:m.lang??'en-GB'};}catch(e){}
+function makeRec(o=micOpts){
+  const r=new SR(); if(o.lang) r.lang=o.lang; r.interimResults=true; r.maxAlternatives=5; r.continuous=o.cont;
   return r;
 }
+const SERVICE_HINT='Prüfe auf dem iPad: Einstellungen → Allgemein → Tastatur → «Diktierfunktion aktivieren» und unter Bildschirmzeit → Beschränkungen → Erlaubte Apps → «Siri & Diktierfunktion».';
 function stopListening(){if(activeListen){activeListen.cancel(); activeListen=null;}}
 let micReason=SR?'':'Dieser Browser kann keine Sprache erkennen. Deshalb hört ein Erwachsener zu.';
 const SOUNDS={one:['won'],two:['to','too'],four:['for'],eight:['ate'],eye:['i','aye'],ear:['year','here'],mum:['mom','mam'],sun:['son']};
@@ -416,7 +436,7 @@ function heardOK(target,alts,sentence){
    onHear(alts) gibt true zurück, wenn das Gesagte schon passt. */
 function listen(onDone,onHear){
   stopListening();
-  let finished=false, stopping=false, alts=[], rec=null, silence=null, hard=null;
+  let finished=false, stopping=false, alts=[], rec=null, silence=null, hard=null, quick=0;
   const t0=Date.now();
   const result=()=>alts.length?{alts}:{error:'no-speech'};
   const cancel=()=>{
@@ -444,14 +464,18 @@ function listen(onDone,onHear){
       if(last.isFinal&&!APPLE) return done({alts});
       clearTimeout(silence); silence=setTimeout(stop,1500);
     };
+    const began=Date.now(); let lastErr='';
     rec.onerror=e=>{
+      lastErr=e.error;
       if(['no-speech','aborted'].includes(e.error)||alts.length) return; // das Ende-Ereignis folgt
       done({error:e.error});
     };
     rec.onend=()=>{
       if(finished) return;
       if(alts.length||stopping||Date.now()-t0>7000) return done(result());
-      setTimeout(()=>{try{startOne()}catch(x){done({error:'start'})}},150); // weiter zuhören
+      // iOS bricht sofort ab, wenn Siri/Diktierfunktion nicht verfügbar ist: nicht endlos neu starten
+      if(lastErr==='aborted'&&Date.now()-began<1000&&++quick>=2) return done({error:'service'});
+      setTimeout(()=>{try{startOne()}catch(x){done({error:'start'})}},300); // weiter zuhören
     };
     rec.start();
   }
@@ -518,6 +542,10 @@ function speakMode(id){
             micBlocked=true;
             micReason='Das Mikrofon ist hier nicht freigegeben. Deshalb hört ein Erwachsener zu.';
             round('Das Mikrofon ist nicht freigegeben. Sprich einfach laut nach.');
+          }else if(res.error==='service'){
+            micBlocked=true;
+            micReason='Die Spracherkennung von iOS bricht sofort ab. '+SERVICE_HINT+' Bis dahin hört ein Erwachsener zu.';
+            round('Die Spracherkennung ist auf diesem Gerät nicht verfügbar. Sprich einfach laut nach.');
           }else if(res.error==='no-speech'){
             fb.textContent='Ich habe nichts gehört. Sprich etwas lauter.';
           }else{

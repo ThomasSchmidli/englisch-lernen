@@ -174,3 +174,5 @@ h1,h2,h3,p{margin:0}
 .err{color:var(--berry);font-weight:700;min-height:1.2em}
 .ver{text-align:center;color:var(--muted);font-size:.85rem;margin-top:.6rem}
 .log{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;font-size:.78rem;line-height:1.4;background:var(--soft);border:2px solid var(--line);border-radius:12px;padding:.6rem;max-height:14rem;overflow:auto;margin:.4rem 0 0}
+.panel .opts label{display:flex;flex-direction:column;font-weight:700;font-size:.95rem;gap:.2rem}
+.panel select{font:inherit;font-size:1rem;color:var(--ink);background:var(--soft);border:2px solid var(--line);border-radius:10px;padding:.3rem .5rem}

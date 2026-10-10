@@ -1,6 +1,6 @@
 /* Offline-Betrieb: eigene Dateien zuerst aus dem Netz (damit Updates sofort ankommen),
    ohne Internet aus dem Zwischenspeicher. */
-const CACHE='englisch-lernen-v4';
+const CACHE='englisch-lernen-v5';
 const FILES=['./','index.html','css/style.css','js/data.js','js/app.js','manifest.webmanifest',
   'icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','icons/favicon.png',
   'fonts/baloo2-latin.woff2'];
