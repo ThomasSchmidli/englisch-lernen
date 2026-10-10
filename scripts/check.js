@@ -4,8 +4,8 @@ const root=path.join(__dirname,'..');
 const errors=[], err=m=>errors.push(m);
 
 const ctx={}; vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8')+'\nthis.THEMES=THEMES; this.LEVELS=LEVELS;',ctx);
-const THEMES=ctx.THEMES, LEVELS=ctx.LEVELS;
+vm.runInContext(fs.readFileSync(path.join(root,'js/data.js'),'utf8')+'\nthis.THEMES=THEMES; this.LEVELS=LEVELS; this.STORIES=STORIES;',ctx);
+const THEMES=ctx.THEMES, LEVELS=ctx.LEVELS, STORIES=ctx.STORIES;
 
 const ids=new Set();
 for(const t of THEMES){
@@ -30,6 +30,23 @@ for(const t of THEMES){
   }
 }
 
+const sids=new Set();
+for(const st of STORIES){
+  const where=`Geschichte «${st.id}»`;
+  if(!st.id||sids.has(st.id)) err(`${where}: id fehlt oder ist doppelt`); sids.add(st.id);
+  if(!LEVELS.some(l=>l.n===st.level)) err(`${where}: level fehlt oder ist unbekannt`);
+  if(!st.title||!st.icon) err(`${where}: title oder icon fehlt`);
+  if(!Array.isArray(st.pages)||st.pages.length<3) err(`${where}: braucht mindestens 3 Seiten`);
+  for(const p of st.pages||[]) if(!p.en||!p.de||!p.e) err(`${where}: Seite ohne en, de oder Bild`);
+  if(!Array.isArray(st.questions)||st.questions.length<2) err(`${where}: braucht mindestens 2 Fragen`);
+  for(const q of st.questions||[]){
+    if(!q.q||!q.de) err(`${where}: Frage ohne Text`);
+    if(!Array.isArray(q.options)||q.options.length<2||new Set(q.options).size!==q.options.length) err(`${where}, «${q.q}»: Antworten fehlen oder sind doppelt`);
+    if(!(q.a>=0&&q.a<(q.options||[]).length)) err(`${where}, «${q.q}»: richtige Antwort a ungültig`);
+  }
+  if(/ß/.test(JSON.stringify(st))) err(`${where}: «ß» statt «ss»`);
+}
+
 const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
 const files=(sw.match(/const FILES=\[([\s\S]*?)\];/)||[])[1]||'';
 for(const f of files.match(/'[^']+'/g)||[]){
@@ -39,4 +56,4 @@ for(const f of files.match(/'[^']+'/g)||[]){
 
 if(errors.length){console.error(errors.map(e=>'✗ '+e).join('\n')); process.exit(1);}
 const n=THEMES.reduce((a,t)=>a+t.items.length,0);
-console.log(`✓ ${THEMES.length} Themen, ${n} Einträge, alles in Ordnung`);
+console.log(`✓ ${THEMES.length} Themen, ${n} Einträge, ${STORIES.length} Geschichten, alles in Ordnung`);

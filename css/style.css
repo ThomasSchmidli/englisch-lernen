@@ -217,3 +217,8 @@ h1,h2,h3,p{margin:0}
 .stk.own{background:var(--card)}
 .newstk{background:var(--sun);color:#1B2559;border:3px solid var(--line);border-radius:16px;padding:.6rem .8rem;text-align:center;font-weight:800;font-size:1.15rem;margin:.6rem 0}
 .newstk .big{font-size:2rem;vertical-align:middle}
+
+/* Geschichten */
+.stage.story .word.sent{font-size:clamp(1.5rem,6.5vw,2.1rem)}
+.ctrl .btn[disabled]{opacity:.4}
+#sayq .word{margin-top:0}

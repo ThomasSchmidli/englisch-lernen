@@ -17,9 +17,11 @@ const start=async(page,state)=>{
   await expect(page.locator('.hello')).toBeVisible();
 };
 const wait=(page,ms=3000)=>page.clock.runFor(ms);
-/* Eine Aufgabe beantworten: Auswahl (erste Option) oder Satz bauen (in richtiger Reihenfolge) */
+/* Eine Aufgabe beantworten: Auswahl (erste Option), Satz bauen (in richtiger Reihenfolge) oder «Weiss ich nicht» */
 async function answer(page){
-  if(await page.locator('.wtile').count()){
+  if(await page.locator('#dunno:visible').count()){
+    await page.locator('#dunno').click();
+  }else if(await page.locator('.wtile').count()){
     await page.evaluate(()=>{
       const de=document.querySelector('.bcard .de').textContent;
       const it=THEMES.flatMap(t=>t.items).find(x=>x.de===de);
@@ -41,7 +43,8 @@ async function playUntilEnd(page,max=60){
 test('Startseite: Levels, Themen, Album, Version',async({page})=>{
   await start(page);
   const n=await page.evaluate(()=>({levels:LEVELS.length,themes:THEMES.length}));
-  await expect(page.locator('h3.sec')).toHaveCount(n.levels);
+  await expect(page.locator('h3.sec')).toHaveCount(n.levels+1); // plus Geschichten
+  await expect(page.locator('[data-go^="story:"]')).toHaveCount(await page.evaluate(()=>STORIES.length));
   await expect(page.locator('[data-go^="theme:"]')).toHaveCount(n.themes);
   await expect(page.locator('[data-go^="ltest:"]')).toHaveCount(n.levels);
   await expect(page.locator('[data-go="album"]')).toBeVisible();
@@ -55,6 +58,7 @@ test('jedes Thema: Menü, Entdecken, Hör-Quiz und Memory bzw. Satz bauen',async
     await page.evaluate(i=>go('theme:'+i),id);
     await expect(page.locator('[data-go^="ttest:"]')).toBeVisible();
     await page.evaluate(i=>go('explore:'+i),id);
+    await expect(page.locator('#slow')).toBeVisible();
     await page.locator('[aria-label="Weiter"]').click();
     await expect(page.locator('.count')).toContainText('2 von');
     await page.evaluate(i=>go('quiz:'+i),id);
@@ -90,13 +94,15 @@ test('Thema-Test speichert das Ergebnis',async({page})=>{
 
 test('Level-Test mit allen richtigen Antworten gibt Gold und Spezial-Sticker',async({page})=>{
   await start(page);
-  await page.evaluate(()=>{window.__said=''; window.speak=t=>{window.__said=t;};});
+  await page.evaluate(()=>{window.__said=''; window.speak=t=>{window.__said=t;};
+    window.hearLocal=(st,lv,target)=>({result:Promise.resolve({alts:[target],ok:true}),stop(){}});});
   await page.evaluate(()=>go('ltest:1'));
   for(let i=0;i<20&&!(await page.locator('.end').count());i++){
     await wait(page,500);
     await page.evaluate(()=>{
       const all=THEMES.flatMap(t=>t.items), opts=[...document.querySelectorAll('.opt')];
-      const tiles=[...document.querySelectorAll('.wtile')];
+      const tiles=[...document.querySelectorAll('.wtile')], smic=document.getElementById('smic');
+      if(smic){ if(!smic.disabled) smic.click(); return; }
       if(tiles.length){
         const it=all.find(x=>x.de===document.querySelector('.bcard .de').textContent);
         for(const w of it.en.split(' ')) [...document.querySelectorAll('.wtile')].find(b=>b.textContent===w&&b.style.visibility!=='hidden').click();
@@ -113,6 +119,58 @@ test('Level-Test mit allen richtigen Antworten gibt Gold und Spezial-Sticker',as
   const d=await page.evaluate(()=>JSON.parse(localStorage.getItem('englisch-lernen-v1')));
   expect(d.stickers).toContain('🦄');
   expect(d.tests['level:1'].best).toBe(100);
+});
+
+test('Aufgabe «Sag es auf Englisch»: falsch, dann richtig; Weiss ich nicht; Mikrofon verweigert',async({page})=>{
+  await start(page);
+  await page.evaluate(()=>{
+    window.__answers=['banana','RIGHT'];
+    window.hearLocal=(st,lv,target)=>{const a=window.__answers.shift(); return {result:Promise.resolve(a==='DENIED'?{error:'not-allowed'}:{alts:[a==='RIGHT'?target:a],ok:a==='RIGHT'}),stop(){}};};
+    window.__done=[]; const t=T('animals');
+    sayStep('animals',t.items[0],t.items,topbar('home','Test'),ok=>window.__done.push(ok));
+  });
+  const mic=page.locator('#smic');
+  await expect(mic).toBeEnabled();
+  await mic.click();
+  await expect(page.locator('.fb')).toContainText('«banana» verstanden');
+  await mic.click();
+  await expect(page.locator('.fb')).toContainText('toll gesagt');
+  await expect(page.locator('#sayq')).toContainText('dog');
+  await wait(page);
+  expect(await page.evaluate(()=>window.__done)).toEqual([true]);
+  // Weiss ich nicht
+  await page.evaluate(()=>{const t=T('animals'); sayStep('animals',t.items[1],t.items,'',ok=>window.__done.push(ok));});
+  await page.locator('#dunno').click();
+  await expect(page.locator('.fb')).toContainText('Es heisst «cat»');
+  await wait(page);
+  // Mikrofon verweigert: zählt nicht
+  await page.evaluate(()=>{window.__answers=['DENIED']; const t=T('animals'); sayStep('animals',t.items[2],t.items,'',ok=>window.__done.push(ok));});
+  await expect(page.locator('#smic')).toBeEnabled();
+  await page.locator('#smic').click();
+  await expect(page.locator('.fb')).toContainText('zählt nicht');
+  await wait(page);
+  expect(await page.evaluate(()=>window.__done)).toEqual([true,false,null]);
+});
+
+test('Geschichte lesen und Fragen beantworten',async({page})=>{
+  await start(page);
+  await page.locator('[data-go="story:zoo-day:0"]').click();
+  await expect(page.locator('.stage .word')).toContainText('This is Tom');
+  await page.locator('#showde').click();
+  await expect(page.locator('#sde')).toBeVisible();
+  const n=await page.evaluate(()=>S_('zoo-day').pages.length);
+  for(let i=1;i<n;i++) await page.locator('[aria-label="Weiter"]').click();
+  await page.locator('[data-go="storyq:zoo-day"]').click();
+  for(let i=0;i<4;i++){
+    await page.evaluate(()=>{
+      const q=S_('zoo-day').questions.find(x=>x.q===document.querySelector('.qde').textContent);
+      [...document.querySelectorAll('.opt')].find(b=>b.getAttribute('aria-label')===q.options[q.a]).click();
+    });
+    await wait(page);
+  }
+  await expect(page.locator('.end')).toContainText('4 von 4');
+  const t=await page.evaluate(()=>JSON.parse(localStorage.getItem('englisch-lernen-v1')).tests['story:zoo-day']);
+  expect(t.best).toBe(100);
 });
 
 test('Heute üben läuft durch und zählt die Serie',async({page})=>{

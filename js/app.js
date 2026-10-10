@@ -1,7 +1,7 @@
 /* Anzeige und Ablauf der App: Navigation, Spiele, Tests, Sprachausgabe, Aufnahme, Spielstand.
    Reine Logik (Datum, Wiederholung, Sprachvergleich, Auswertung) liegt in js/logic.js. */
 /* Bei jeder Veröffentlichung erhöhen: wird unten auf der Startseite angezeigt */
-const VERSION='11';
+const VERSION='12';
 const PRAISE=['Super!','Toll!','Richtig!','Grossartig!','Genau!','Yes!'];
 
 /* Spielstand im Browser (Schlüssel nicht ändern, sonst beginnt der Spielstand bei null) */
@@ -33,13 +33,13 @@ function pickVoice(){
   voice=vs.find(v=>/^en[-_]GB/i.test(v.lang))||vs.find(v=>/^en/i.test(v.lang))||null;
 }
 if(speechOK){pickVoice(); speechSynthesis.onvoiceschanged=pickVoice;}
-function speak(t){
+function speak(t,slow){
   if(!speechOK||activeRecord) return; // während der Aufnahme nichts vorlesen
   try{
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(t);
     u.lang=voice?voice.lang:'en-GB'; if(voice) u.voice=voice;
-    u.rate=.8; u.pitch=1.05;
+    u.rate=slow?.5:.8; u.pitch=1.05;
     speechSynthesis.speak(u);
   }catch(e){}
 }
@@ -126,6 +126,65 @@ function album(msg){
     if(buySticker(data,e,cost)){save(); album(`Neuer Sticker: ${e} ${st.name}!`);}
   });
 }
+/* Geschichten: Seite für Seite vorlesen, dann Verständnisfragen (ein Versuch, Ergebnis wie ein Test) */
+const S_=id=>STORIES.find(x=>x.id===id);
+function storyTile(st){
+  const best=bestOf('story:'+st.id);
+  return `<button class="btn tile" data-go="story:${st.id}:0">
+    <span class="icon" style="background:var(--grape)">${st.icon}</span>
+    <span class="tx"><span class="name">${st.title} ${medalBadge('story:'+st.id)}</span>
+    <span class="meta">${L(st.level).icon} ${L(st.level).name} · ${st.pages.length} Seiten${best?` · Fragen: ${best} %`:''}</span></span>
+  </button>`;
+}
+function story(id,i){
+  const st=S_(id), n=st.pages.length; i=Math.max(0,Math.min(n-1,i)); const p=st.pages[i], last=i===n-1;
+  app.innerHTML=`${topbar('home',st.title)}
+  ${dots(n,i)}
+  <button class="stage story" id="say" aria-label="Vorlesen">${vis({e:p.e,s:true},'lg')}<span class="word sent">${p.en}</span><span class="de" id="sde" hidden>${p.de}</span></button>
+  <div class="ctrl">
+    <button class="btn round" data-go="story:${id}:${i-1}" aria-label="Zurück"${i?'':' disabled'}>◀</button>
+    <button class="btn round sun" id="say2" aria-label="Vorlesen">🔊</button>
+    <button class="btn round" id="slow" aria-label="Langsam vorlesen">🐢</button>
+    ${last?`<button class="btn sun" data-go="storyq:${id}">Fragen ▶</button>`:`<button class="btn round" data-go="story:${id}:${i+1}" aria-label="Weiter">▶</button>`}
+  </div>
+  <button class="btn small skip" id="showde">Auf Deutsch zeigen</button>`;
+  const sde=document.getElementById('sde'), showde=document.getElementById('showde');
+  showde.onclick=()=>{sde.hidden=!sde.hidden; showde.textContent=sde.hidden?'Auf Deutsch zeigen':'Deutsch verstecken';};
+  const s=slow=>{speak(p.en,slow); pop(app.querySelector('.stage .lg'));};
+  document.getElementById('say').onclick=()=>s();
+  document.getElementById('say2').onclick=()=>s();
+  document.getElementById('slow').onclick=()=>s(true);
+  setTimeout(()=>speak(p.en),300);
+}
+function storyQuiz(id){
+  const st=S_(id), qs=st.questions; let r=0, got=0;
+  function round(){
+    if(r>=qs.length) return testEnd('story:'+id,'Fragen zu «'+st.title+'»','home',got,qs.length);
+    const q=qs[r], opts=shuffle(q.options.map((o,k)=>({o,ok:k===q.a})));
+    let done=false;
+    app.innerHTML=`${topbar('home',st.title)}
+    ${dots(qs.length,r)}
+    <div class="bcard"><span class="emo md" aria-hidden="true">${st.icon}</span><p class="qde">${q.q}</p><p class="de">${q.de}</p>
+    <button class="btn small sun" id="again">🔊 Anhören</button></div>
+    <div class="grid words">${opts.map((x,k)=>`<button class="btn opt txt" data-k="${k}" aria-label="${x.o}"><span class="otext">${x.o}</span></button>`).join('')}</div>
+    <p class="fb" aria-live="polite"></p>
+    <button class="btn small skip" data-go="story:${id}:0">Geschichte nochmal lesen</button>`;
+    const fb=app.querySelector('.fb'), btns=[...app.querySelectorAll('.opt')], right=q.options[q.a];
+    document.getElementById('again').onclick=()=>speak(q.q);
+    btns.forEach(b=>b.onclick=()=>{
+      if(done) return; done=true;
+      const ok=opts[+b.dataset.k].ok;
+      btns.forEach(x=>{x.disabled=true; if(opts[+x.dataset.k].ok) x.classList.add('right');});
+      if(ok){got++; pop(b); addStars(1); starFly(b); fb.textContent=pick(PRAISE);}
+      else{b.classList.add('wrong'); fb.textContent=`Richtig wäre: «${right}»`;}
+      speak(right);
+      setTimeout(()=>{r++; round();},ok?1500:2600);
+    });
+    setTimeout(()=>speak(q.q),300);
+  }
+  round();
+}
+
 function home(){
   const p=practiceInfo(), n=streakNow(), doneToday=data.streak.last===today();
   const pmeta=doneToday?'Heute schon geübt ✓ Du kannst gern nochmal.'
@@ -144,10 +203,13 @@ function home(){
   ${albumTile()}
   ${LEVELS.map(l=>`<h3 class="sec">${l.icon} ${l.name} <span class="sub">${l.sub}</span></h3>
   <div class="list two">${levelThemes(l.n).map(tileHTML).join('')}${levelTestTile(l)}</div>`).join('')}
+  <h3 class="sec">📚 Geschichten <span class="sub">Hören und verstehen</span></h3>
+  <div class="list two">${STORIES.map(storyTile).join('')}</div>
   ${speechOK?'':'<p class="note">Dieses Gerät kann leider nichts vorlesen. Öffne die App am besten in Safari oder Chrome.</p>'}
   ${standalone?'':`<p class="note small">Tipp für Eltern: ${/iPhone|iPad|Macintosh/.test(navigator.userAgent)?'In Safari auf «Teilen» und dann «Zum Home-Bildschirm» tippen.':'Im Browser-Menü «App installieren» oder «Zum Startbildschirm hinzufügen» wählen.'} Dann startet die App wie eine richtige App und läuft auch ohne Internet.</p>`}
   <button class="reset" data-go="parents">Für Eltern: Übersicht, Spielstand sichern, Sprechen einstellen</button>
   <p class="ver">Version ${VERSION}</p>`;
+  schedulePreload();
 }
 
 /* Für Eltern: Fortschritt pro Level und Thema, schwierige Wörter */
@@ -164,6 +226,7 @@ function overviewHTML(){
     <div class="ov">${LEVELS.map(l=>`<div class="ovl"><p class="ovh">${l.icon} ${l.name} ${medalBadge('level:'+l.n)}${bestOf('level:'+l.n)?` <span class="small">Test ${bestOf('level:'+l.n)} %</span>`:''}</p>
       ${levelThemes(l.n).map(t=>{const k=knownCount(t), n=t.items.length, b=bestOf('theme:'+t.id);
         return `<div class="ovr"><span>${t.icon} ${t.name}</span><span class="bar"><span style="width:${Math.round(k/n*100)}%;background:${t.color}"></span></span><span class="small">${k}/${n}${b?` · ${medalBadge('theme:'+t.id)} ${b} %`:''}</span></div>`;}).join('')}</div>`).join('')}</div>
+    <p class="small">Geschichten: ${STORIES.map(st=>`${st.icon} ${st.title} ${bestOf('story:'+st.id)?medalBadge('story:'+st.id)+' '+bestOf('story:'+st.id)+' %':'–'}`).join(' · ')}</p>
     <h3>Schwierige Wörter</h3>
     ${hard?`<ul class="hard">${hard}</ul><p class="small">Diese Wörter kommen bei «Heute üben» automatisch öfter dran.</p>`:'<p class="small">Noch keine Fehler gespeichert.</p>'}`;
 }
@@ -295,12 +358,14 @@ function explore(id,i){
   <div class="ctrl">
     <button class="btn round" data-go="explore:${id}:${i-1}" aria-label="Zurück">◀</button>
     <button class="btn round sun" id="say2" aria-label="Anhören">🔊</button>
+    <button class="btn round" id="slow" aria-label="Langsam anhören">🐢</button>
     <button class="btn round" data-go="explore:${id}:${i+1}" aria-label="Weiter">▶</button>
   </div>
   <p class="count">${i+1} von ${n}</p>`;
   const s=()=>{speak(it.en); pop(app.querySelector('.stage .lg'));};
   document.getElementById('say').onclick=s;
   document.getElementById('say2').onclick=s;
+  document.getElementById('slow').onclick=()=>{speak(it.en,true); pop(app.querySelector('.stage .lg'));};
   setTimeout(()=>speak(it.en),150);
 }
 
@@ -419,13 +484,14 @@ function practiceList(){
   return shuffle(list);
 }
 function practice(){
-  const rounds=practiceList(); let r=0, got=0;
+  const rounds=practiceList(); let r=0, got=0, skipped=0;
   function round(){
-    if(r>=rounds.length) return practiceEnd(got,rounds.length);
-    const {t,it}=rounds[r];
+    if(r>=rounds.length) return practiceEnd(got,rounds.length-skipped);
+    const {t,it,s:st}=rounds[r];
     const head=topbar('home','Heute üben')+dots(rounds.length,r)+`<p class="from">${t.icon} ${t.name}</p>`;
-    const next=ok=>{if(ok)got++; r++; round();};
-    if(it.s&&it.en.includes(' ')&&Math.random()<.5) buildStep(t.id,it,head,next);
+    const next=ok=>{if(ok===null) skipped++; else if(ok) got++; r++; round();};
+    if(canSpeak()&&st&&st.l>=2&&sayable(it)&&Math.random()<.35) sayStep(t.id,it,t.items,head,next);
+    else if(it.s&&it.en.includes(' ')&&Math.random()<.5) buildStep(t.id,it,head,next);
     else quizStep(t.id,it,t.items,head,next);
   }
   round();
@@ -443,7 +509,8 @@ function practiceEnd(got,n){
 }
 
 /* Tests: pro Thema (10 Aufgaben) oder pro Level (12 Aufgaben aus allen Themen des Levels).
-   Jede Aufgabe nur ein Versuch. Arten: hören → Bild, Bild → englisches Wort, Deutsch → Englisch, Satz bauen. */
+   Jede Aufgabe nur ein Versuch (sagen: zwei). Arten: hören → Bild, Bild → englisches Wort, Deutsch → Englisch,
+   Satz bauen, selbst sagen. */
 function choiceStep(tid,it,pool,kind,head,onDone){
   let done=false;
   const opts=shuffle([it,...shuffle(pool.filter(x=>x!==it)).slice(0,3)]);
@@ -476,18 +543,24 @@ function testQuestions(themes,n){
   const bags=shuffle(themes).map(t=>shuffle(t.items).map(it=>({t,it})));
   const list=[];
   while(list.length<n&&bags.some(b=>b.length)) for(const b of bags){if(b.length&&list.length<n) list.push(b.pop());}
-  // Aufgabenarten gleichmässig verteilen, dann mischen; Sätze dürfen statt «lesen» auch gebaut werden
-  const kinds=['hear','read','translate'];
-  return shuffle(shuffle(list).map((q,i)=>({...q,kind:q.it.s&&i%3===1?'build':kinds[i%3]})));
+  // Aufgabenarten gleichmässig verteilen, dann mischen; Sätze dürfen statt «lesen» auch gebaut werden;
+  // «sagen» nur, wenn die App zuhören kann
+  const kinds=canSpeak()?['hear','read','translate','say']:['hear','read','translate'], k=kinds.length;
+  return shuffle(shuffle(list).map((q,i)=>{
+    let kind=q.it.s&&i%k===1?'build':kinds[i%k];
+    if(kind==='say'&&!sayable(q.it)) kind='translate';
+    return {...q,kind};
+  }));
 }
 function runTest(key,title,back,themes,n){
-  const qs=testQuestions(themes,n); let r=0, got=0;
+  const qs=testQuestions(themes,n); let r=0, got=0, skipped=0;
   function round(){
-    if(r>=qs.length) return testEnd(key,title,back,got,qs.length);
+    if(r>=qs.length) return testEnd(key,title,back,got,qs.length-skipped);
     const {t,it,kind}=qs[r];
     const head=topbar(back,title)+dots(qs.length,r)+(themes.length>1?`<p class="from">${t.icon} ${t.name}</p>`:'');
-    const next=ok=>{if(ok)got++; r++; round();};
+    const next=ok=>{if(ok===null) skipped++; else if(ok) got++; r++; round();};
     if(kind==='build') buildStep(t.id,it,head,next);
+    else if(kind==='say') sayStep(t.id,it,t.items,head,next);
     else choiceStep(t.id,it,t.items,kind,head,next);
   }
   round();
@@ -504,8 +577,10 @@ function testEnd(key,title,back,got,n){
   <div class="end"><div class="trophy">${res.medal?res.medal.icon:'💪'}</div><h2>${big}</h2>
   <p>${title}: ${got} von ${n} richtig (${res.pct} %).${res.medal?` Das ist ${res.medal.name}!`:' Ab 50 % gibt es eine Medaille.'}${improved}${res.bonus?` Dafür gibt es ${res.bonus===1?'einen Extra-Stern':res.bonus+' Extra-Sterne'}.`:''}</p>
   ${reward?`<p class="newstk">Neuer Spezial-Sticker: <span class="big">${reward}</span> ${LEVEL_STICKERS[key.slice(6)][1]}!</p>`:''}
-  <div class="col"><button class="btn sun" data-go="${key.startsWith('level:')?'ltest:'+key.slice(6):'ttest:'+key.slice(6)}">Test nochmal machen</button>
-  ${res.passed?'':'<button class="btn" data-go="practice">Mit «Heute üben» trainieren</button>'}
+  <div class="col">${key.startsWith('story:')?`<button class="btn sun" data-go="storyq:${key.slice(6)}">Fragen nochmal</button>
+  <button class="btn" data-go="story:${key.slice(6)}:0">Geschichte nochmal lesen</button>`
+  :`<button class="btn sun" data-go="${key.startsWith('level:')?'ltest:'+key.slice(6):'ttest:'+key.slice(6)}">Test nochmal machen</button>
+  ${res.passed?'':'<button class="btn" data-go="practice">Mit «Heute üben» trainieren</button>'}`}
   ${reward?'<button class="btn" data-go="album">Zum Sticker-Album</button>':''}
   <button class="btn" data-go="${back}">Zurück</button></div></div>`;
 }
@@ -654,6 +729,96 @@ try{
 }catch(e){}
 function saveMic(){try{localStorage.setItem(MICKEY,JSON.stringify(micOpts))}catch(e){}}
 
+const canSpeak=()=>micOpts.input==='local'&&LOCAL_OK&&!micBlocked;
+const micErrorText=e=>e==='no-speech'?'Ich habe nichts gehört. Sprich etwas lauter.'
+  :e==='asr'?'Die Spracherkennung konnte nicht geladen werden. Ist Internet da? Probier es nochmal.'
+  :'Das Mikrofon hat nicht geklappt. Probier es nochmal.';
+/* Mikrofon-Knopf: wartet auf die Spracherkennung (mit Fortschritt), nimmt auf, prüft und meldet das Ergebnis.
+   Ein zweites Antippen beendet die Aufnahme. 🎧 (o.me) spielt die eigene Aufnahme ab.
+   Bei verweigertem Mikrofon wird auf den Eltern-Check umgestellt (micBlocked). */
+function attachMic(o){
+  const {btn,me,hint}=o; let busy=false, cur=null, clip=null;
+  if(me) me.onclick=()=>playClip(clip);
+  if(asrProgress<1){
+    btn.disabled=true;
+    const show=v=>{
+      if(!document.body.contains(btn)){asrWatch.delete(show); return;}
+      if(v<1) hint.textContent=`Die Spracherkennung wird vorbereitet … ${Math.round(v*100)} %`;
+      else{asrWatch.delete(show); if(!busy){btn.disabled=false; hint.textContent=o.idle;}}
+    };
+    asrWatch.add(show); show(asrProgress);
+    loadASR().catch(()=>{
+      asrWatch.delete(show);
+      if(!document.body.contains(btn)) return;
+      btn.disabled=false;
+      hint.textContent='Die Spracherkennung konnte nicht geladen werden. Ist Internet da? Tipp aufs Mikrofon, um es nochmal zu versuchen.';
+    });
+  }
+  btn.onclick=()=>{
+    if(o.isDone()) return;
+    if(busy){ if(cur) cur.stop(); return; }
+    busy=true;
+    if(speechOK) speechSynthesis.cancel();
+    btn.classList.add('live');
+    cur=hearLocal(st=>{
+      if(st==='listen') hint.textContent='Ich höre zu … sprich jetzt!';
+      if(st==='think'){btn.classList.remove('live'); btn.classList.add('think'); hint.textContent='Ich überlege …';}
+    },v=>btn.style.setProperty('--lvl',v.toFixed(2)),o.target,o.pool,o.sentence);
+    cur.result.then(res=>{
+      busy=false; cur=null; btn.classList.remove('live','think'); btn.style.removeProperty('--lvl');
+      if(!res||o.isDone()||!document.body.contains(btn)) return;
+      if(res.clip){clip=res; if(me) me.hidden=false; if(o.onClip) o.onClip(res);}
+      hint.textContent=clip?'Tipp auf 🎧, um dich selbst zu hören.':o.idle;
+      if(res.error==='not-allowed'){micBlocked=true; micReason=SR_HINT;}
+      o.onResult(res);
+    });
+  };
+}
+
+/* Aufgabe «Sag es auf Englisch»: Bild und Deutsch sehen, das englische Wort selbst sagen (ohne Vorsprechen).
+   Zwei Versuche; «Weiss ich nicht» zählt als falsch. onDone(null), wenn das Mikrofon nicht geht (zählt nicht). */
+function sayStep(tid,it,pool,head,onDone){
+  let done=false, tries=0;
+  app.innerHTML=`${head}
+  <div class="bcard">${vis(it,'md')}<p class="qde">${it.de}</p><p class="de" id="sayq">Sag es auf Englisch!</p></div>
+  <div class="ctrl"><button class="btn mic sun" id="smic" aria-label="Jetzt sprechen">🎤</button><button class="btn round" id="me" hidden aria-label="Meine Aufnahme anhören">🎧</button></div>
+  <p class="hint" id="hint">Tipp aufs Mikrofon und sag es auf Englisch.</p>
+  <p class="fb" aria-live="polite"></p>
+  <button class="btn small skip" id="dunno">Weiss ich nicht</button>`;
+  const fb=app.querySelector('.fb'), hint=document.getElementById('hint'), btn=document.getElementById('smic');
+  const finish=ok=>{
+    if(done) return; done=true; btn.disabled=true; document.getElementById('dunno').hidden=true;
+    grade(tid,it.en,ok);
+    document.getElementById('sayq').innerHTML=`<span class="word${it.s?' sent':''}">${it.en}</span>`;
+    if(ok){addStars(1); starFly(btn); pop(btn); fb.textContent=`${pick(PRAISE)} Das hast du toll gesagt!`;}
+    else fb.textContent=`Es heisst «${it.en}». Hör gut zu!`;
+    speak(it.en);
+    setTimeout(()=>onDone(ok),ok?1900:3000);
+  };
+  document.getElementById('dunno').onclick=()=>finish(false);
+  attachMic({btn,me:document.getElementById('me'),hint,target:it.en,pool:pool.map(x=>x.en),sentence:!!it.s,
+    idle:'Tipp aufs Mikrofon und sag es auf Englisch.',isDone:()=>done,
+    onResult:res=>{
+      if(res.error){
+        if(res.error==='not-allowed'){done=true; fb.textContent='Das Mikrofon ist nicht freigegeben. Diese Aufgabe zählt nicht.'; setTimeout(()=>onDone(null),2200); return;}
+        fb.textContent=micErrorText(res.error); return;
+      }
+      if(res.ok) return finish(true);
+      if(++tries>=2) return finish(false);
+      fb.textContent=`Ich habe «${res.alts[0]}» verstanden. Probier es nochmal!`;
+    }});
+}
+const sayable=it=>!it.s||it.en.split(' ').length<=5;
+
+/* Spracherkennung im Hintergrund vorladen, damit beim ersten Sprechen niemand warten muss */
+let preloadPlanned=false;
+function schedulePreload(){
+  if(preloadPlanned||asrPromise||!canSpeak()) return;
+  if(navigator.connection&&navigator.connection.saveData) return;
+  preloadPlanned=true;
+  setTimeout(()=>{(window.requestIdleCallback||(f=>f()))(()=>loadASR().catch(()=>{preloadPlanned=false;}));},5000);
+}
+
 /* «Hör dich selbst»: die letzte Aufnahme abspielen */
 function playClip(c){
   if(!c||!recCtx) return;
@@ -680,7 +845,7 @@ function speakMode(id){
     app.innerHTML=`${topbar('theme:'+id,'Sprechen')}
     ${dots(rounds.length,r)}
     <div class="stage static">${vis(it,'lg')}<span class="word${it.s?' sent':''}">${it.en}</span><span class="de">auf Deutsch: ${it.de}</span></div>
-    <div class="ctrl"><button class="btn round" id="hear" aria-label="Vorlage anhören">🔊</button>
+    <div class="ctrl"><button class="btn round" id="hear" aria-label="Vorlage anhören">🔊</button><button class="btn round" id="slow" aria-label="Langsam anhören">🐢</button>
     ${mode==='local'?'<button class="btn mic sun" id="lmic" aria-label="Jetzt sprechen">🎤</button><button class="btn round" id="me" hidden aria-label="Meine Aufnahme anhören">🎧</button>'
       :'<button class="btn sun said" id="said">Ich hab\'s gesagt</button>'}</div>
     <div class="check" id="check" hidden><p>Eltern-Check: Hat es richtig geklungen?</p><div class="ctrl"><button class="btn sun" id="yes">Ja, richtig ✓</button><button class="btn" id="again2">Nochmal üben</button></div></div>
@@ -703,6 +868,7 @@ function speakMode(id){
       setTimeout(()=>speak(it.en),500);
     };
     document.getElementById('hear').onclick=()=>speak(it.en);
+    document.getElementById('slow').onclick=()=>speak(it.en,true);
     skip.onclick=()=>{if(done) return; if(tries) grade(id,it.en,false); next();};
 
     // Eltern-Check
@@ -714,52 +880,17 @@ function speakMode(id){
     }
 
     // Die App hört zu (Erkennung auf dem Gerät)
-    const lmic=document.getElementById('lmic'), me=document.getElementById('me');
-    if(lmic){
-      me.onclick=()=>playClip(clip);
-      if(asrProgress<1){
-        lmic.disabled=true;
-        const show=v=>{
-          if(!document.body.contains(lmic)){asrWatch.delete(show); return;}
-          if(v<1) hint.textContent=`Die Spracherkennung wird vorbereitet … ${Math.round(v*100)} %`;
-          else{asrWatch.delete(show); if(!busy){lmic.disabled=false; hint.textContent='Hör zu, dann tipp aufs Mikrofon und sprich nach.';}}
-        };
-        asrWatch.add(show); show(asrProgress);
-        loadASR().catch(()=>{
-          asrWatch.delete(show);
-          if(!document.body.contains(lmic)) return;
-          lmic.disabled=false;
-          hint.textContent='Die Spracherkennung konnte nicht geladen werden. Ist Internet da? Tipp aufs Mikrofon, um es nochmal zu versuchen.';
-        });
-      }
-      let cur=null;
-      lmic.onclick=()=>{
-        if(done) return;
-        if(busy){ if(cur) cur.stop(); return; }
-        busy=true; fb.textContent='';
-        if(speechOK) speechSynthesis.cancel();
-        lmic.classList.add('live');
-        cur=hearLocal(st=>{
-          if(st==='listen') hint.textContent='Ich höre zu … sprich jetzt!';
-          if(st==='think'){lmic.classList.remove('live'); lmic.classList.add('think'); hint.textContent='Ich überlege …';}
-        },v=>lmic.style.setProperty('--lvl',v.toFixed(2)),it.en,t.items.map(x=>x.en),sent);
-        cur.result.then(res=>{
-          busy=false; cur=null; lmic.classList.remove('live','think'); lmic.style.removeProperty('--lvl');
-          if(!res||done||!document.body.contains(lmic)) return;
-          if(res.clip){clip=res; me.hidden=false;}
-          hint.textContent=clip?'Tipp auf 🎧, um dich selbst zu hören.':'Tipp aufs Mikrofon und sprich nach.';
-          if(res.error){
-            if(res.error==='not-allowed'){micBlocked=true; micReason=SR_HINT; return round('Das Mikrofon ist nicht freigegeben. Sprich einfach laut nach.');}
-            fb.textContent=res.error==='no-speech'?'Ich habe nichts gehört. Sprich etwas lauter.'
-              :res.error==='asr'?'Die Spracherkennung konnte nicht geladen werden. Ist Internet da? Probier es nochmal.'
-              :'Das Mikrofon hat nicht geklappt. Probier es nochmal.';
-            return;
-          }
-          if(res.ok) success(lmic);
-          else wrong(res.alts[0]);
-        });
-      };
-    }
+    const lmic=document.getElementById('lmic');
+    if(lmic) attachMic({btn:lmic,me:document.getElementById('me'),hint,target:it.en,pool:t.items.map(x=>x.en),sentence:sent,
+      idle:'Hör zu, dann tipp aufs Mikrofon und sprich nach.',isDone:()=>done,
+      onClip:c=>{clip=c;},
+      onResult:res=>{
+        if(res.error){
+          if(res.error==='not-allowed') return round('Das Mikrofon ist nicht freigegeben. Sprich einfach laut nach.');
+          fb.textContent=micErrorText(res.error); return;
+        }
+        if(res.ok) success(lmic); else wrong(res.alts[0]);
+      }});
     setTimeout(()=>speak(it.en),300);
   }
   round();
@@ -825,6 +956,8 @@ function go(route){
   else if(s==='speak') speakMode(id);
   else if(s==='ttest') themeTest(id);
   else if(s==='ltest') levelTest(id);
+  else if(s==='story') story(id,+(arg||0));
+  else if(s==='storyq') storyQuiz(id);
 }
 app.addEventListener('click',e=>{const b=e.target.closest('[data-go]'); if(b) go(b.dataset.go);});
 home();

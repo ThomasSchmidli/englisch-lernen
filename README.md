@@ -1,8 +1,8 @@
 # Englisch lernen
 
 Kleine Lern-App für Kinder, die mit Englisch beginnen: Wörter und einfache Sätze
-in 4 Levels mit Bildern, Sprachausgabe, Hör-Quiz, Memory, Satz bauen und Sprechübungen
-(mit «Hör dich selbst»). Tests pro Thema und pro Level vergeben Medaillen,
+in 4 Levels mit Bildern, Sprachausgabe (auch langsam 🐢), Hör-Quiz, Memory, Satz bauen,
+Sprechübungen (mit «Hör dich selbst») und kurzen Bildergeschichten mit Verständnisfragen. Tests pro Thema und pro Level vergeben Medaillen,
 mit Sternen lassen sich Sticker fürs Album freischalten.
 «Heute üben» mischt fällige Wiederholungen aus allen Themen (1, 2, 4, 7, 14 Tage)
 mit neuen Wörtern und zählt die Tage hintereinander.

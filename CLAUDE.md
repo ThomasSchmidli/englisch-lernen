@@ -13,17 +13,23 @@
   - Satz-Thema: `{id, level, kind:'sentences', ..., items:[S(en, de, emoji)]}`
   - Bestehende `id`s und `en`-Texte nicht ändern: daran hängt der Spielstand.
   - Jedes Thema braucht mindestens 6 Einträge (Memory) und Bilder, die sich im Quiz klar unterscheiden.
+- Geschichten: `STORIES` in `js/data.js` (`P(en, de, emoji)` pro Seite, `Q(frage, deutsch, antworten, a)`; Antworten werden gemischt).
+  Ergebnis wie ein Test unter `tests['story:id']`. `scripts/check.js` prüft Aufbau und Antworten.
 - Sticker-Album: `STICKER_PACKS` und `LEVEL_STICKERS` in `js/data.js`; Emojis nicht ändern (daran hängt der Spielstand).
 - Spielstand-Schlüssel `englisch-lernen-v1` in localStorage nicht ändern. Bei Änderungen am Datenformat eine Übernahme der alten Daten in `normalize()` (js/logic.js) einbauen; das nutzt auch «Wiederherstellen».
   - Inhalt: `stars`, `known` (gelernt pro Thema), `srs` (`'themaId|en'` → `{l: Stufe 0–5, d: fällig am JJJJ-MM-TT, w: Anzahl Fehler}`),
     `streak` (`{n, last}`), `bonus` (Datum der letzten Extra-Sterne), `tests` (`'theme:id'`/`'level:n'` → `{best, last, date}`),
     `stickers` (freigeschaltete Emojis), `earned` (alle je verdienten Sterne; `stars` ist der Rest nach Sticker-Käufen).
-- Tests: pro Thema 10, pro Level 12 Aufgaben (hören → Bild, Bild → Wort, Deutsch → Englisch, Satz bauen), ein Versuch pro Aufgabe.
+- Tests: pro Thema 10, pro Level 12 Aufgaben (hören → Bild, Bild → Wort, Deutsch → Englisch, Satz bauen, selbst sagen), ein Versuch pro Aufgabe (sagen: zwei).
+  «Sag es auf Englisch» (`sayStep`) nur, wenn die App zuhören kann (`canSpeak()`); auch in «Heute üben» für Einträge ab Stufe 2.
+  Geht das Mikrofon nicht, zählt die Aufgabe nicht (`onDone(null)`).
   Medaillen ab 50/75/90 %, bestanden ab 75 % (`testResult` in js/logic.js).
 - Sprechen: die App hört zu mit Erkennung auf dem Gerät (Whisper über Transformers.js, `ASR_LIB`/`ASR_MODEL` in `js/app.js`), sonst Eltern-Check.
   Einzige externe Quellen: Bibliothek von cdn.jsdelivr.net (feste Version), Modell von huggingface.co; die Aufnahme bleibt auf dem Gerät.
   Geprüft wird das erwartete Wort gegen die ähnlichsten Einträge des Themas (`checkSpoken`), nicht nur die freie Erkennung.
   Safari-Spracherkennung und Tastatur-Diktat wurden bewusst entfernt (auf dem iPad meist Stille bzw. abhängig von der Tastatursprache).
+  Mikrofon-Knopf überall über `attachMic()`. Das Modell wird 5 s nach dem Öffnen der Startseite im Hintergrund vorgeladen (`schedulePreload`).
+  Die Bedienungs-Tests täuschen `hearLocal` vor: Playwright-Chromium hat auf dem Mac keine Audio-Verarbeitung, echte Aufnahmen nur am Gerät prüfen.
 - Schrift «Baloo 2» liegt in `fonts/` (keine weiteren externen Quellen wie Google Fonts einbinden).
 - Offline: `sw.js` lädt eigene Dateien zuerst aus dem Netz. Neue Dateien in `FILES` eintragen und bei Änderungen an `sw.js` die Version in `CACHE` erhöhen.
 - Bei jeder Veröffentlichung `VERSION` in `js/app.js` erhöhen (unten auf der Startseite sichtbar, so sieht man, ob ein Gerät aktuell ist).

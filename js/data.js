@@ -175,3 +175,62 @@ const THEMES=[
     S('It is hot.','Es ist heiss.','🥵'),S("What's the weather like?",'Wie ist das Wetter?','❓🌦️')
   ]}
 ];
+
+/* Geschichten: Seiten mit Bild, englischem Satz und deutscher Hilfe, danach Verständnisfragen.
+   a = Index der richtigen Antwort in options. Bestehende ids nicht ändern (Ergebnis hängt daran). */
+const P=(en,de,e)=>({en,de,e});
+const Q=(q,de,options,a=0)=>({q,de,options,a});
+const STORIES=[
+  {id:'zoo-day',level:3,title:'Tom im Zoo',icon:'🦁',pages:[
+    P('This is Tom. Tom is eight years old.','Das ist Tom. Tom ist acht Jahre alt.','👦'),
+    P('Today Tom goes to the zoo with his dad.','Heute geht Tom mit seinem Papa in den Zoo.','👨👦🚌'),
+    P('Tom sees a big elephant.','Tom sieht einen grossen Elefanten.','🐘'),
+    P('The monkeys are funny. Tom laughs.','Die Affen sind lustig. Tom lacht.','🐒😂'),
+    P('Tom is hungry. He eats an ice cream.','Tom hat Hunger. Er isst eine Glace.','🍦'),
+    P('What a great day!','Was für ein toller Tag!','🌅😊')
+  ],questions:[
+    Q('How old is Tom?','Wie alt ist Tom?',['eight','six','ten']),
+    Q('Who goes to the zoo with Tom?','Wer geht mit Tom in den Zoo?',['his dad','his sister','his teacher']),
+    Q('What does Tom see?','Was sieht Tom?',['an elephant','a tiger','a penguin']),
+    Q('What does Tom eat?','Was isst Tom?',['an ice cream','a pizza','an apple'])
+  ]},
+  {id:'birthday',level:3,title:'Lenas Geburtstag',icon:'🎂',pages:[
+    P("Today is Lena's birthday.",'Heute hat Lena Geburtstag.','🎂👧'),
+    P('She is nine years old.','Sie ist neun Jahre alt.','🎈'),
+    P('Her friends come to the party.','Ihre Freunde kommen zum Fest.','👧👦🎉'),
+    P('They play games and dance.','Sie spielen und tanzen.','🎲💃'),
+    P('Grandma brings a big chocolate cake.','Grossmutter bringt einen grossen Schokoladenkuchen.','👵🍰'),
+    P('Lena gets a red bike. She is very happy.','Lena bekommt ein rotes Velo. Sie ist sehr fröhlich.','🚲😊')
+  ],questions:[
+    Q('How old is Lena?','Wie alt ist Lena?',['nine','eight','seven']),
+    Q('Who brings the cake?','Wer bringt den Kuchen?',['Grandma','Mum','Tom']),
+    Q('What colour is the bike?','Welche Farbe hat das Velo?',['red','blue','green']),
+    Q('How is Lena?','Wie geht es Lena?',['happy','sad','tired'])
+  ]},
+  {id:'snow-day',level:4,title:'Ein Tag im Schnee',icon:'⛄',pages:[
+    P('It is winter. It is very cold.','Es ist Winter. Es ist sehr kalt.','❄️🥶'),
+    P('Max puts on his scarf and gloves.','Max zieht seinen Schal und seine Handschuhe an.','🧣🧤'),
+    P('He goes outside with his sister Mia.','Er geht mit seiner Schwester Mia nach draussen.','👦👧'),
+    P('They build a big snowman.','Sie bauen einen grossen Schneemann.','⛄'),
+    P('The snowman has a carrot nose.','Der Schneemann hat eine Karottennase.','🥕⛄'),
+    P('Then they drink hot chocolate at home.','Dann trinken sie zu Hause heisse Schokolade.','☕🏠')
+  ],questions:[
+    Q('What is the weather like?','Wie ist das Wetter?',['cold','hot','windy']),
+    Q('Who is Mia?','Wer ist Mia?',['his sister','his mum','his friend']),
+    Q('What do they build?','Was bauen sie?',['a snowman','a house','a car']),
+    Q("What is the snowman's nose?",'Was ist die Nase des Schneemanns?',['a carrot','a banana','a stone'])
+  ]},
+  {id:'where-luna',level:4,title:'Wo ist Luna?',icon:'🐱',pages:[
+    P('Emma has a little cat. Her name is Luna.','Emma hat eine kleine Katze. Sie heisst Luna.','👧🐱'),
+    P('One morning Luna is not there.','Eines Morgens ist Luna nicht da.','🌅❓'),
+    P('Emma looks under the bed. No Luna!','Emma schaut unter das Bett. Keine Luna!','🛏️❌'),
+    P('She looks in the garden. No Luna!','Sie schaut im Garten. Keine Luna!','🌳❌'),
+    P('Then Emma hears a sound: Meow!','Dann hört Emma ein Geräusch: Miau!','👂🐱'),
+    P('Luna is in the box with the toys!','Luna ist in der Kiste mit den Spielsachen!','📦🧸🐱')
+  ],questions:[
+    Q('What is Luna?','Was ist Luna?',['a cat','a dog','a rabbit']),
+    Q('Where does Emma look first?','Wo schaut Emma zuerst?',['under the bed','in the kitchen','in the car']),
+    Q('What does Emma hear?','Was hört Emma?',['Meow!','Woof!','Quack!']),
+    Q('Where is Luna?','Wo ist Luna?',['in the box','on the bed','in the tree'])
+  ]}
+];
