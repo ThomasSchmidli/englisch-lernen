@@ -13,5 +13,9 @@
 - Offline: `sw.js` lädt eigene Dateien zuerst aus dem Netz. Neue Dateien in `FILES` eintragen und bei Änderungen an `sw.js` die Version in `CACHE` erhöhen.
 - Jedes Thema braucht mindestens 6 Einträge (Memory) und Emojis, die sich im Quiz klar unterscheiden.
 - Schrift «Baloo 2» liegt in `fonts/` (keine externen Quellen wie Google Fonts einbinden).
+- Sprechen: Standard ist die Erkennung auf dem Gerät (Whisper über Transformers.js, `ASR_LIB`/`ASR_MODEL` in `js/app.js`).
+  Einzige externe Quellen: Bibliothek von cdn.jsdelivr.net (feste Version), Modell von huggingface.co; die Aufnahme bleibt auf dem Gerät.
+  Geprüft wird das erwartete Wort gegen die ähnlichsten Einträge des Themas (`checkSpoken`), nicht nur die freie Erkennung.
+  Die Safari-Spracherkennung liefert auf iPhone/iPad oft nur Stille und bleibt nur als Auswahl im Eltern-Bereich.
 - Für Eltern (Sichern/Wiederherstellen) nutzt `normalize()`: neue Felder dort mit Standardwert ergänzen.
 - Nach Änderungen: `node scripts/check.js` (läuft auch als GitHub Action), lokal mit `python3 -m http.server` testen, dann committen und auf `main` pushen.

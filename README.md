@@ -38,5 +38,6 @@ und dann http://localhost:8000 öffnen. Die Spracherkennung braucht https oder l
 
 - Spielstand: wird im Browser gespeichert (localStorage, Schlüssel `englisch-lernen-v1`).
   Den Schlüssel nicht ändern, sonst beginnt der Spielstand bei null.
-- Sprechübungen: nutzen die Spracherkennung des Browsers (Safari: Diktierfunktion muss
-  aktiv sein). Ohne Mikrofon schaltet die App auf den Eltern-Check um.
+- Sprechübungen: Die Aufnahme wird direkt auf dem Gerät erkannt (Whisper, Transformers.js).
+  Beim ersten Mal wird das Modell (ca. 41 MB) von huggingface.co geladen, danach klappt es offline.
+  Im Eltern-Bereich lässt sich stattdessen Safari-Erkennung, Tastatur-Diktat oder Eltern-Check wählen.

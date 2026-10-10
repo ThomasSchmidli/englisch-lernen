@@ -181,3 +181,6 @@ h1,h2,h3,p{margin:0}
 .dict input,.ktest{flex:1;min-width:0;width:100%;font:inherit;font-size:1.3rem;font-weight:700;color:var(--ink);background:var(--card);border:3px solid var(--line);border-radius:16px;padding:.5rem .8rem}
 .dict input:focus,.ktest:focus{outline:4px solid var(--sun);outline-offset:2px}
 .kb{display:block;margin:1rem auto 0}
+.mic.live{transform:scale(calc(1 + var(--lvl,0) * .12))}
+.mic.think{background:var(--grape);color:#fff;animation:pulse 1.2s ease-in-out infinite}
+.mic:disabled{opacity:.5}
